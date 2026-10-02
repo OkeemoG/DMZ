@@ -1,0 +1,15 @@
+name: smoke
+topology:
+  nodes:
+    a:
+      kind: linux
+      image: alpine:3.20
+      exec:
+        - ip addr add 10.0.0.1/30 dev eth1
+    b:
+      kind: linux
+      image: alpine:3.20
+      exec:
+        - ip addr add 10.0.0.2/30 dev eth1
+  links:
+    - endpoints: ["a:eth1", "b:eth1"]
