@@ -71,7 +71,8 @@ topology:
         - ip addr add 10.10.10.5/30 dev eth3
         - ip addr add 10.10.10.9/30 dev eth4
         - ip addr add 10.10.10.13/30 dev eth5
-        # eth6: Spiegelausgang zum IDS, nochohne Adresse 
+        # eth6: Spiegelausgang zum IDS, noch ohne Adresse
+        - ip route replace default via 10.10.0.1 dev eth1
 
     proxy:
       kind: linux
