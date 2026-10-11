@@ -4,7 +4,7 @@ set -euo pipefail
 TAG="0.1"
 IMAGES=(fw router client)
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/../images"
 
 for img in "${IMAGES[@]}"; do
   echo "== Baue ${img}:${TAG}"

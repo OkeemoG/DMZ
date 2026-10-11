@@ -1,7 +1,7 @@
-.PHONY: images deploy destroy test2 test
+.PHONY: images deploy destroy test test-images test-topology
 
 images:
-	bash images/build.sh
+	bash scripts/build-images.sh
 
 deploy: images
 	containerlab deploy -t topology/dmz.clab.yml --reconfigure
@@ -9,10 +9,13 @@ deploy: images
 destroy:
 	containerlab destroy -t topology/dmz.clab.yml --cleanup
 
-test2:
-	bash topology/test/test2.sh
+test-images:
+	bash tests/test-images.sh
 
-test:
-	containerlab deploy -t topology/test/basicTest.clab.yml
+test-topology:
+	bash tests/test-topology.sh
+
+test-basic:
+	containerlab deploy -t topology/basicTest.clab.yml
 	docker exec clab-basicTest-a ping -c 2 10.0.0.2
-	containerlab destroy -t topology/test/basicTest.clab.yml --cleanup
+	containerlab destroy -t topology/basicTest.clab.yml --cleanup
