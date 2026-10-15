@@ -15,6 +15,9 @@ test-images:
 test-topology:
 	bash tests/test-topology.sh
 
+test-matrix:
+   	bash tests/test-matrix.sh
+
 test-basic:
 	containerlab deploy -t topology/basicTest.clab.yml
 	docker exec clab-basicTest-a ping -c 2 10.0.0.2
