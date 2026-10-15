@@ -16,7 +16,7 @@ test-topology:
 	bash tests/test-topology.sh
 
 test-matrix:
-   	bash tests/test-matrix.sh
+	bash tests/test-matrix.sh
 
 test-basic:
 	containerlab deploy -t topology/basicTest.clab.yml
