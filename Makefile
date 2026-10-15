@@ -1,4 +1,4 @@
-.PHONY: images deploy destroy test test-images test-topology
+.PHONY: images deploy destroy test-basic test-images test-topology
 
 images:
 	bash scripts/build-images.sh

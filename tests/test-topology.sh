@@ -38,6 +38,10 @@ for n in "${NODES[@]}"; do
   esac
   if [ "$n" = "inet" ]; then exp=keine; else exp=daten; fi
   result T-01 "$n IPv4-Standardroute" "$exp" "$r"
+  if [ -n "$def6" ]; then r=vorhanden; else r=keine; fi
+  result T-01 "$n IPv6-Standardroute" keine "$r"
+  if x "$n" ip link show eth0 >/dev/null 2>&1; then r=vorhanden; else r=fehlt; fi
+  result T-01 "$n ohne eth0 (Management-Netz)" fehlt "$r"
 done
 
 echo "== T-02 Nachbarn"
