@@ -1,0 +1,49 @@
+#!/usr/sbin/nft -f
+# fw-edge: Edge-Firewall zwischen Internet, DMZ, Client-Netz, Backend-Netz und VPN.
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request limit rate 10/second accept comment "Diagnose"
+        iifname "eth1" ip saddr { 198.51.100.2, 198.51.100.6 } udp dport 51820 accept comment "K-07 VPN-Aufbau"
+        counter comment "verworfen"
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+        ct state established,related accept
+        ct state invalid drop
+
+        iifname "eth1" oifname "eth2" ip daddr 10.10.10.2 tcp dport { 80, 443 } ct status dnat accept comment "K-01 Internet -> proxy"
+        iifname "eth3" oifname "eth2" ip saddr 10.10.20.0/24 ip daddr 10.10.10.2 tcp dport 443 accept comment "K-04 Client -> proxy"
+        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 tcp dport { 80, 443 } accept comment "K-05 Client -> Internet"
+        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 icmp type echo-request accept comment "K-05 Client -> Internet"
+        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 tcp dport { 80, 443 } accept comment "K-06 DMZ -> Internet"
+        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 icmp type echo-request accept comment "K-06 DMZ -> Internet"
+        iifname "wg0" oifname "eth2" ip saddr { 10.99.0.2, 10.99.0.3 } ip daddr 10.10.10.2 tcp dport 443 accept comment "K-08 VPN -> proxy"
+        iifname "eth2" oifname "eth4" ip saddr { 10.10.10.6, 10.10.10.14, 10.10.0.2 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09, K-10 Meldungen -> siem"
+
+        counter comment "verworfen"
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}
+
+table ip nat {
+    chain prerouting {
+        type nat hook prerouting priority dstnat; policy accept;
+        iifname "eth1" ip daddr 203.0.113.2 tcp dport { 80, 443 } dnat to 10.10.10.2 comment "K-01"
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        oifname "eth1" ip saddr { 10.10.20.0/24, 10.10.10.0/24 } snat to 203.0.113.2 comment "K-05, K-06"
+    }
+}

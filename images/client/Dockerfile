@@ -5,6 +5,7 @@ RUN apk add --no-cache \
       iproute2 \
       curl \
       tcpdump \
-      wireguard-tools
+      wireguard-tools \
+      socat
 
 CMD ["sleep", "infinity"]

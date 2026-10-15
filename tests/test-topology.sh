@@ -59,9 +59,12 @@ ping_test T-02 fw-dmz     10.10.10.14  ok
 ping_test T-02 router-int 10.10.20.10  ok
 ping_test T-02 fw-backend 10.10.30.10  ok
 
-echo "== T-03 Ende zu Ende"
-ping_test T-03a client1  10.10.30.10 ok
+echo "== T-03 Ende zu Ende (mit aktiver Firewall)"
+# client1 -> Internet: router-int, fw-edge mit Quellumsetzung, inet (K-05)
+ping_test T-03a client1  192.0.2.10  ok
 ping_test T-03b attacker 203.0.113.2 ok
+# web -> Internet: fw-dmz, fw-edge mit Quellumsetzung, inet (K-06)
+ping_test T-03e web      192.0.2.10  ok
 # Negativtest: inet kennt keine privaten Netze. Antwortet siem trotzdem,
 # laeuft Verkehr am Datenpfad vorbei (z. B. ueber das Management-Netz).
 ping_test T-03d inet     10.10.30.10 fail

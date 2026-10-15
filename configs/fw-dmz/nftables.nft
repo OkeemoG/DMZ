@@ -1,0 +1,35 @@
+#!/usr/sbin/nft -f
+# fw-dmz: Firewall der DMZ.
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request limit rate 10/second accept comment "Diagnose"
+        counter comment "verworfen"
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+        ct state established,related accept
+        ct state invalid drop
+
+        iifname "eth1" oifname "eth2" ip saddr { 10.10.20.0/24, 10.99.0.2, 10.99.0.3 } ip daddr 10.10.10.2 tcp dport 443 accept comment "K-04, K-08 intern -> proxy"
+        iifname "eth1" oifname "eth2" ip saddr != 10.0.0.0/8 ip daddr 10.10.10.2 tcp dport { 80, 443 } accept comment "K-01 Internet -> proxy"
+        iifname "eth2" oifname "eth3" ip saddr 10.10.10.2 ip daddr 10.10.10.6 tcp dport 8080 accept comment "K-02 proxy -> waf"
+        iifname "eth3" oifname "eth4" ip saddr 10.10.10.6 ip daddr 10.10.10.10 tcp dport 8080 accept comment "K-03 waf -> web"
+        iifname { "eth2", "eth3", "eth4", "eth5" } oifname "eth1" ip saddr 10.10.10.0/24 ip daddr != 10.0.0.0/8 tcp dport { 80, 443 } accept comment "K-06 DMZ -> Internet"
+        iifname { "eth2", "eth3", "eth4", "eth5" } oifname "eth1" ip saddr 10.10.10.0/24 ip daddr != 10.0.0.0/8 icmp type echo-request accept comment "K-06 DMZ -> Internet"
+        iifname { "eth3", "eth5" } oifname "eth1" ip saddr { 10.10.10.6, 10.10.10.14 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09 Meldungen -> siem"
+
+        counter comment "verworfen"
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}

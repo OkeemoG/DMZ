@@ -18,7 +18,7 @@ check() {
 
 check fw      ip nft ulogd tcpdump wg
 check router  ip tcpdump
-check client  ip curl tcpdump wg
+check client  ip curl tcpdump wg socat
 
 if [ "$fail" -eq 0 ]; then
   echo "ERGEBNIS: bestanden"

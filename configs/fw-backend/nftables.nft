@@ -1,0 +1,29 @@
+#!/usr/sbin/nft -f
+# fw-backend: Firewall des Backend-Netzes. 
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority filter; policy drop;
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request limit rate 10/second accept comment "Diagnose"
+        counter comment "verworfen"
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+        ct state established,related accept
+        ct state invalid drop
+
+        iifname "eth1" oifname "eth2" ip saddr { 10.10.10.6, 10.10.10.14, 10.10.0.2, 10.10.0.9 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09, K-10, K-11 Meldungen -> siem"
+
+        counter comment "verworfen"
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}
