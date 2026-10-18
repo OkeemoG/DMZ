@@ -82,7 +82,9 @@ topology:
 
     proxy:
       kind: linux
-      image: client:0.1
+      image: proxy:0.1
+      binds:
+        - ../configs/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
       exec:
         - ip addr add 10.10.10.2/30 dev eth1
         - ip route replace default via 10.10.10.1 dev eth1

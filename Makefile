@@ -1,4 +1,4 @@
-.PHONY: images deploy destroy test-basic test-images test-topology
+.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy
 
 images:
 	bash scripts/build-images.sh
@@ -17,6 +17,9 @@ test-topology:
 
 test-matrix:
 	bash tests/test-matrix.sh
+
+test-proxy:
+	bash tests/test-proxy.sh
 
 test-basic:
 	containerlab deploy -t topology/basicTest.clab.yml

@@ -18,7 +18,8 @@ check() {
 
 check fw      ip nft ulogd tcpdump wg
 check router  ip tcpdump
-check client  ip curl tcpdump wg socat
+check client  ip curl tcpdump wg socat openssl
+check proxy   ip nginx
 
 if [ "$fail" -eq 0 ]; then
   echo "ERGEBNIS: bestanden"

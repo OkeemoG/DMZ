@@ -6,6 +6,7 @@ RUN apk add --no-cache \
       curl \
       tcpdump \
       wireguard-tools \
-      socat
+      socat \
+      openssl
 
 CMD ["sleep", "infinity"]
