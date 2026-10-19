@@ -83,10 +83,6 @@ result P-07a "Cipher-Suite nach Tabelle 13" ja "$(has "$out" '^Ciphersuite: TLS_
 result P-07a "Signatur ECDSA mit SHA-512 (Tabelle 11)" ja "$(has "$out" '^Hash used: SHA512$')"
 result P-07a "Gruppe nach Tabelle 10" ja "$(has "$out" '(Temp Key: ECDH, |group: )(secp(256|384|521)r1|prime256v1|brainpoolP(256|384|512)r1)')"
 
-out=$(tls -tls1_2 -groups brainpoolP512r1:secp384r1)
-result P-07b "TLS 1.2 mit Brainpool-Gruppe (Tabellen 2, 6)" ja "$(has "$out" '^Protocol version: TLSv1\.2$')"
-result P-07b "TLS 1.2 Cipher-Suite nach Tabelle 3 (GCM)" ja "$(has "$out" '^Ciphersuite: ECDHE-ECDSA-AES(256-GCM-SHA384|128-GCM-SHA256)$')"
-
 cert=$(x attacker sh -c "openssl s_client -connect 203.0.113.2:443 </dev/null 2>/dev/null | openssl x509 -noout -text" 2>/dev/null)
 result P-07c "Zertifikat: Kurve brainpoolP512r1 (Abschnitt 3.6.2)" ja "$(has "$cert" 'ASN1 OID: brainpoolP512r1')"
 result P-07c "Zertifikat: Signatur ecdsa-with-SHA512" ja "$(has "$cert" 'Signature Algorithm: ecdsa-with-SHA512')"
@@ -97,15 +93,10 @@ out=$(tls -tls1_3 -groups X25519)
 result P-07d "X25519 abgelehnt (nicht in Tabelle 10)" nein "$(has "$out" '^Protocol version')"
 out=$(tls -tls1_3 -ciphersuites TLS_CHACHA20_POLY1305_SHA256)
 result P-07d "ChaCha20 abgelehnt (nicht in Tabelle 13)" nein "$(has "$out" '^Protocol version')"
-out=$(tls -tls1_2 -groups brainpoolP512r1:secp384r1 -cipher ECDHE-ECDSA-AES256-SHA384)
-result P-07d "TLS 1.2 mit CBC abgelehnt" nein "$(has "$out" '^Protocol version')"
+out=$(tls -tls1_2 -groups brainpoolP512r1:secp384r1)
+result P-07d "TLS 1.2 abgelehnt, auch mit Brainpool-Gruppe (nur TLS 1.3)" nein "$(has "$out" '^Protocol version')"
 out=$(tls -tls1_1 -cipher DEFAULT@SECLEVEL=0)
 result P-07d "TLS 1.1 abgelehnt (Tabelle 2)" nein "$(has "$out" '^Protocol version')"
-
-# Information: TLS 1.2 ohne angebotene Brainpool-Gruppe (Standard-Client)
-out=$(tls -tls1_2)
-if [ "$(has "$out" '^Protocol version')" = ja ]; then i="moeglich"; else i="nicht moeglich"; fi
-echo "INFO   P-07e TLS 1.2 mit Standard-Gruppen des Clients: $i"
 
 echo "== Ratenbegrenzung (20/s, Puffer 40)"
 codes=$(x attacker sh -c 'curl -sk -Z --parallel-max 50 -o "/tmp/r#1" -w "%{http_code}\n" "https://203.0.113.2/r[1-100]"; rm -f /tmp/r*' 2>/dev/null)
