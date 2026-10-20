@@ -16,7 +16,13 @@ set -uo pipefail
 P="clab-dmz"
 fail=0
 
-x() { docker exec "${P}-$1" "${@:2}"; }
+x() {
+  if [ "$1" = "web" ]; then
+    docker run --rm --network "container:${P}-web" client:0.1 "${@:2}"
+  else
+    docker exec "${P}-$1" "${@:2}"
+  fi
+}
 
 result() { # Test-ID, Beschreibung, erwartet, Ergebnis
   if [ "$3" = "$4" ]; then
@@ -57,9 +63,8 @@ if x fw-edge nft list table ip nat >/dev/null 2>&1; then r=ok; else r=fail; fi
 result F-00 "fw-edge ip nat" ok "$r"
 
 echo "== Testdienste starten"
-for n in waf web ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
+for n in waf ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 listen waf      tcp 8080
-listen web      tcp 8080
 listen ids      tcp 8080
 listen siem     udp 5140
 listen client1  tcp 8080
@@ -71,7 +76,7 @@ sleep 1
 echo "== Erlaubte Verbindungen"
 probe K-01 attacker conn 203.0.113.2 443  ok
 probe K-01 attacker conn 203.0.113.2 80   ok
-probe K-03 waf      tcp  10.10.10.10 8080 ok
+probe K-03 waf      conn 10.10.10.10 8080 ok
 probe K-04 client1  conn 10.10.10.2  443  ok
 probe K-05 client1  tcp  192.0.2.10  443  ok
 probe K-05 client1  tcp  192.0.2.10  80   ok
@@ -85,8 +90,8 @@ probe K-09 ids      udp  10.10.30.10 5140 ok
 echo "== Verbotene Verbindungen"
 # V-01, V-02: zusaetzlich durch Routing gesperrt (inet kennt keine privaten Netze)
 probe V-01 attacker tcp  10.10.20.10 8080 fail
-probe V-02 attacker tcp  10.10.10.10 8080 fail
-probe V-03 client1  tcp  10.10.10.10 8080 fail
+probe V-02 attacker conn 10.10.10.10 8080 fail
+probe V-03 client1  conn 10.10.10.10 8080 fail
 probe V-03 client1  tcp  10.10.10.6  8080 fail
 probe V-03 client1  tcp  10.10.10.14 8080 fail
 probe V-03 client1  conn 10.10.10.2  80   fail
@@ -101,7 +106,7 @@ probe V-08 siem     tcp  192.0.2.10  443  fail
 probe V-12 web      tcp  192.0.2.10  22   fail
 
 echo "== Testdienste beenden"
-for n in waf web ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
+for n in waf ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 
 echo "== Zaehler verworfener Pakete (Nachweis)"
 for fw in fw-edge fw-dmz fw-backend; do
