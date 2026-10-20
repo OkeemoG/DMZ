@@ -98,7 +98,8 @@ topology:
 
     web:
       kind: linux
-      image: client:0.1
+      image: web:0.1
+      memory: 128MB
       exec:
         - ip addr add 10.10.10.10/30 dev eth1
         - ip route replace default via 10.10.10.9 dev eth1
