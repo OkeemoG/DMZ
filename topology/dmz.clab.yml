@@ -91,7 +91,14 @@ topology:
 
     waf:
       kind: linux
-      image: client:0.1
+      image: waf:0.1
+      memory: 256MB
+      env:
+        BACKEND: http://10.10.10.10:8080
+        PORT: "8080"
+        MODSEC_RULE_ENGINE: "On"
+        BLOCKING_PARANOIA: "1"
+        ANOMALY_INBOUND: "5"
       exec:
         - ip addr add 10.10.10.6/30 dev eth1
         - ip route replace default via 10.10.10.5 dev eth1

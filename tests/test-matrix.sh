@@ -17,14 +17,13 @@ P="clab-dmz"
 fail=0
 
 x() {
-  if [ "$1" = "web" ]; then
-    docker run --rm --network "container:${P}-web" client:0.1 "${@:2}"
-  else
-    docker exec "${P}-$1" "${@:2}"
-  fi
+  case "$1" in
+    web|waf) docker run --rm --network "container:${P}-$1" client:0.1 "${@:2}" ;;
+    *)       docker exec "${P}-$1" "${@:2}" ;;
+  esac
 }
 
-result() { # Test-ID, Beschreibung, erwartet, Ergebnis
+result() {
   if [ "$3" = "$4" ]; then
     echo "OK     $1 $2"
   else
@@ -33,14 +32,14 @@ result() { # Test-ID, Beschreibung, erwartet, Ergebnis
   fi
 }
 
-listen() { # Knoten, tcp|udp, Port
+listen() {
   case "$2" in
     tcp) docker exec -d "${P}-$1" socat "TCP-LISTEN:$3,fork,reuseaddr" "SYSTEM:echo ok" ;;
     udp) docker exec -d "${P}-$1" socat "UDP-RECVFROM:$3,fork" "SYSTEM:echo ok" ;;
   esac
 }
 
-probe() { # Test-ID, Quelle, tcp|udp|icmp, Ziel, Port, erwartet (ok|fail)
+probe() {
   local out=""
   case "$3" in
     tcp)  out=$(x "$2" socat -T2 - "TCP:$4:$5,connect-timeout=2" </dev/null 2>/dev/null) ;;
@@ -63,8 +62,7 @@ if x fw-edge nft list table ip nat >/dev/null 2>&1; then r=ok; else r=fail; fi
 result F-00 "fw-edge ip nat" ok "$r"
 
 echo "== Testdienste starten"
-for n in waf ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
-listen waf      tcp 8080
+for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 listen ids      tcp 8080
 listen siem     udp 5140
 listen client1  tcp 8080
@@ -88,25 +86,23 @@ probe K-09 waf      udp  10.10.30.10 5140 ok
 probe K-09 ids      udp  10.10.30.10 5140 ok
 
 echo "== Verbotene Verbindungen"
-# V-01, V-02: zusaetzlich durch Routing gesperrt (inet kennt keine privaten Netze)
 probe V-01 attacker tcp  10.10.20.10 8080 fail
 probe V-02 attacker conn 10.10.10.10 8080 fail
 probe V-03 client1  conn 10.10.10.10 8080 fail
-probe V-03 client1  tcp  10.10.10.6  8080 fail
+probe V-03 client1  conn 10.10.10.6  8080 fail
 probe V-03 client1  tcp  10.10.10.14 8080 fail
 probe V-03 client1  conn 10.10.10.2  80   fail
 probe V-04 client1  udp  10.10.30.10 5140 fail
 probe V-04 client1  icmp 10.10.30.10 -    fail
 probe V-05 web      conn 10.10.10.2  443  fail
-probe V-05 web      tcp  10.10.10.6  8080 fail
+probe V-05 web      conn 10.10.10.6  8080 fail
 probe V-06 web      tcp  10.10.20.10 8080 fail
 probe V-07 web      udp  10.10.30.10 5140 fail
-# V-08: zusaetzlich ohne Adressumsetzung fuer das Backend
 probe V-08 siem     tcp  192.0.2.10  443  fail
 probe V-12 web      tcp  192.0.2.10  22   fail
 
 echo "== Testdienste beenden"
-for n in waf ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
+for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 
 echo "== Zaehler verworfener Pakete (Nachweis)"
 for fw in fw-edge fw-dmz fw-backend; do
