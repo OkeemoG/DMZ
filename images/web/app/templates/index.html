@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Login</h2>
+<form method="post" action="/login">
+  <label>User <input type="text" name="username"></label><br>
+  <label>Password <input type="password" name="password"></label><br>
+  <button type="submit">Sign in</button>
+</form>
+<h2>Document download</h2>
+<ul>
+  <li><a href="/download?file=welcome.txt">welcome.txt</a></li>
+  <li><a href="/download?file=handbook.txt">handbook.txt</a></li>
+</ul>
+{% endblock %}

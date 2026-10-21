@@ -1,4 +1,4 @@
-.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy
+.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web
 
 images:
 	bash scripts/build-images.sh
@@ -25,3 +25,6 @@ test-basic:
 	containerlab deploy -t topology/basicTest.clab.yml
 	docker exec clab-basicTest-a ping -c 2 10.0.0.2
 	containerlab destroy -t topology/basicTest.clab.yml --cleanup
+
+test-web: images
+	bash tests/test-web.sh
