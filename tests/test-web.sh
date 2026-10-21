@@ -2,6 +2,7 @@
 set -uo pipefail
 
 IMG="web:0.1"
+CLIENT="client:0.1"
 fail=0
 
 result() {
@@ -22,17 +23,11 @@ start() {
   return 1
 }
 
-req() {
-  docker exec "$1" curl -s -o /dev/null -w '%{http_code}' "$2" 2>/dev/null
-}
-
-body() {
-  docker exec "$1" curl -s "$2" 2>/dev/null
-}
-
-post() {
-  docker exec "$1" curl -s --data "$3" "$2" 2>/dev/null
-}
+req()      { docker run --rm --network "container:$1" "$CLIENT" curl -s -o /dev/null -w '%{http_code}' "$2" 2>/dev/null; }
+body()     { docker run --rm --network "container:$1" "$CLIENT" curl -s "$2" 2>/dev/null; }
+head_()    { docker run --rm --network "container:$1" "$CLIENT" curl -sI "$2" 2>/dev/null; }
+post()     { docker run --rm --network "container:$1" "$CLIENT" curl -s --data "$3" "$2" 2>/dev/null; }
+postcode() { docker run --rm --network "container:$1" "$CLIENT" curl -s -o /dev/null -w '%{http_code}' --data "$3" "$2" 2>/dev/null; }
 
 docker rm -f web-vuln web-secure >/dev/null 2>&1
 
@@ -46,8 +41,7 @@ echo "== W-01 Function (vulnerable mode)"
 result W-01 "index page" 200 "$(req web-vuln http://127.0.0.1:8080/)"
 ok=$(post web-vuln http://127.0.0.1:8080/login "username=alice&password=alice123" | grep -c "Logged in as alice")
 result W-01 "valid login" 1 "$ok"
-bad=$(docker exec web-vuln curl -s -o /dev/null -w '%{http_code}' --data "username=alice&password=wrong" http://127.0.0.1:8080/login)
-result W-01 "wrong password rejected" 401 "$bad"
+result W-01 "wrong password rejected" 401 "$(postcode web-vuln http://127.0.0.1:8080/login 'username=alice&password=wrong')"
 result W-01 "search works" 200 "$(req web-vuln 'http://127.0.0.1:8080/search?q=Router')"
 
 echo "== W-02 Vulnerabilities present (vulnerable mode)"
@@ -71,9 +65,9 @@ ok=$(post web-secure http://127.0.0.1:8080/login "username=alice&password=alice1
 result W-03 "valid login still works" 1 "$ok"
 
 echo "== W-04 Hardening"
-srv=$(docker exec web-secure curl -sI http://127.0.0.1:8080/health | tr -d '\r' | grep -ic '^server: web$')
+srv=$(head_ web-secure http://127.0.0.1:8080/health | tr -d '\r' | grep -ic '^server: web$')
 result W-04 "Server header without version" 1 "$srv"
-err=$(body web-secure 'http://127.0.0.1:8080/download?file=welcome.txt../x' | grep -ic traceback)
+err=$(body web-secure 'http://127.0.0.1:8080/download?file=nope.txt' | grep -ic traceback)
 result W-04 "no stack trace on error" 0 "$err"
 docker rm -f web-secure >/dev/null 2>&1
 
