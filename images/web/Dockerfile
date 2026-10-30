@@ -14,4 +14,4 @@ COPY app/ /app/
 
 EXPOSE 8080
 
-CMD ["gunicorn", "--preload", "--user", "app", "--group", "app", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "10", "app:app"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "--preload", "--user", "app", "--group", "app", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "10", "app:app"]

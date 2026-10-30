@@ -62,7 +62,6 @@ def client_ip():
 
 @app.after_request
 def add_headers(resp):
-    resp.headers["Server"] = "web"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     return resp
