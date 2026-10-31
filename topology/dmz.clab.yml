@@ -95,6 +95,7 @@ topology:
       memory: 256MB
       binds:
         - ../configs/waf/realip.conf:/etc/nginx/conf.d/00-realip.conf:ro
+        - ../configs/waf/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro
       env:
         BACKEND: http://10.10.10.10:8080
         PORT: "8080"

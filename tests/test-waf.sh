@@ -76,6 +76,9 @@ lg=$(waflog "${RUN}-atk-g")
 result W-05 "audit entry has real internal address" yes "$(has "$lg" '"client_ip": ?"10\.10\.20\.10"')"
 lok=$(waflog "${RUN}-ok3")
 result W-05 "no audit entry for legitimate login" no "$([ -n "$lok" ] && echo yes || echo no)"
+x attacker curl -sk -o /dev/null -H "Host: 198.18.0.1" "$EXT/?id=${RUN}-host" >/dev/null 2>&1
+lh=$(waflog "${RUN}-host")
+result W-05 "foreign numeric Host header still detected (920350)" yes "$(has "$lh" '"ruleId": ?"920350"')"
 
 echo "== W-06 Block page does not reveal details"
 resp=$(x attacker curl -sk -i -G --data "id=${RUN}-atk-h" --data-urlencode "q=<script>alert(1)</script>" "$EXT/search" 2>/dev/null | tr -d '\r')
