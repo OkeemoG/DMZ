@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Search results for: {{ term }}</h2>
+<table border="1">
+  <tr><th>Name</th><th>Description</th></tr>
+  {% for row in rows %}
+  <tr><td>{{ row["name"] }}</td><td>{{ row["description"] }}</td></tr>
+  {% endfor %}
+</table>
+<p><a href="/">Back</a></p>
+{% endblock %}
