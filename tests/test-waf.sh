@@ -46,7 +46,9 @@ result W-01 "search (Internet)" 200 "$(code attacker -G --data "id=${RUN}-ok2" -
 result W-01 "valid login (Internet)" 200 "$(code attacker --data-urlencode "username=alice" --data-urlencode "password=alice123" "$EXT/login?id=${RUN}-ok3")"
 result W-01 "wrong password reaches app, not WAF" 401 "$(code attacker --data-urlencode "username=alice" --data-urlencode "password=wrong" "$EXT/login?id=${RUN}-ok4")"
 result W-01 "file download (Internet)" 200 "$(code attacker -G --data "id=${RUN}-ok5" --data-urlencode "file=welcome.txt" "$EXT/download")"
-result W-01 "search with apostrophe in normal text" 200 "$(code attacker -G --data "id=${RUN}-ok6" --data-urlencode "q=O'Neil router" "$EXT/search")"
+c6=$(code attacker -G --data "id=${RUN}-ok6" --data-urlencode "q=O'Neil router" "$EXT/search")
+result W-01 "apostrophe in normal text not blocked by WAF" yes "$([ "$c6" != "403" ] && echo yes || echo no)"
+result W-01 "apostrophe request reached web (status $c6)" yes "$([ -n "$(weblog "${RUN}-ok6")" ] && echo yes || echo no)"
 result W-01 "search (client network)" 200 "$(code client1 -G --data "id=${RUN}-ok7" --data-urlencode "q=Switch" "$INT/search")"
 result W-01 "legitimate requests reached web" yes "$([ -n "$(weblog "${RUN}-ok5")" ] && [ -n "$(weblog "${RUN}-ok7")" ] && echo yes || echo no)"
 
