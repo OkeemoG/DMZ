@@ -93,12 +93,17 @@ topology:
       kind: linux
       image: waf:0.1
       memory: 256MB
+      binds:
+        - ../configs/waf/realip.conf:/etc/nginx/conf.d/00-realip.conf:ro
       env:
         BACKEND: http://10.10.10.10:8080
         PORT: "8080"
         MODSEC_RULE_ENGINE: "On"
         BLOCKING_PARANOIA: "1"
         ANOMALY_INBOUND: "5"
+        SET_REAL_IP_FROM: "10.10.10.2"
+        REAL_IP_HEADER: "X-Real-IP"
+        REAL_IP_RECURSIVE: "off"
       exec:
         - ip addr add 10.10.10.6/30 dev eth1
         - ip route replace default via 10.10.10.5 dev eth1

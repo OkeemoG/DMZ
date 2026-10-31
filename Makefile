@@ -1,4 +1,4 @@
-.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web
+.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf
 
 images:
 	bash scripts/build-images.sh
@@ -28,3 +28,6 @@ test-basic:
 
 test-web: images
 	bash tests/test-web.sh
+
+test-waf:
+	bash tests/test-waf.sh

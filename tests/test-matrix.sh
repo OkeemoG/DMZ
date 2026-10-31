@@ -18,7 +18,7 @@ fail=0
 
 x() {
   case "$1" in
-    web|waf) docker run --rm --network "container:${P}-$1" client:0.1 "${@:2}" ;;
+    web|waf|proxy) docker run --rm --network "container:${P}-$1" client:0.1 "${@:2}" ;;
     *)       docker exec "${P}-$1" "${@:2}" ;;
   esac
 }
@@ -74,6 +74,7 @@ sleep 1
 echo "== Erlaubte Verbindungen"
 probe K-01 attacker conn 203.0.113.2 443  ok
 probe K-01 attacker conn 203.0.113.2 80   ok
+probe K-02 proxy    conn 10.10.10.6  8080 ok
 probe K-03 waf      conn 10.10.10.10 8080 ok
 probe K-04 client1  conn 10.10.10.2  443  ok
 probe K-05 client1  tcp  192.0.2.10  443  ok
