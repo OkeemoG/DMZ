@@ -22,6 +22,7 @@ check client  ip curl tcpdump wg socat openssl
 check proxy   ip nginx
 check web     ip python3 gunicorn
 check waf     ip nginx
+check ids     ip suricata
 
 if [ "$fail" -eq 0 ]; then
   echo "ERGEBNIS: bestanden"

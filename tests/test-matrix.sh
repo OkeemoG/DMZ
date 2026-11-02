@@ -18,7 +18,7 @@ fail=0
 
 x() {
   case "$1" in
-    web|waf|proxy) docker run --rm --network "container:${P}-$1" client:0.1 "${@:2}" ;;
+    web|waf|proxy|ids) docker run --rm --network "container:${P}-$1" client:0.1 "${@:2}" ;;
     *)       docker exec "${P}-$1" "${@:2}" ;;
   esac
 }
@@ -33,10 +33,17 @@ result() {
 }
 
 listen() {
+  local a
   case "$2" in
-    tcp) docker exec -d "${P}-$1" socat "TCP-LISTEN:$3,fork,reuseaddr" "SYSTEM:echo ok" ;;
-    udp) docker exec -d "${P}-$1" socat "UDP-RECVFROM:$3,fork" "SYSTEM:echo ok" ;;
+    tcp) a="TCP-LISTEN:$3,fork,reuseaddr" ;;
+    udp) a="UDP-RECVFROM:$3,fork" ;;
   esac
+  if [ "$1" = "ids" ]; then
+    # ids hat kein socat: Dienst in einem Hilfscontainer im Netz von ids
+    docker run -d --rm --name "${P}-ids-socat" --network "container:${P}-ids" client:0.1 socat "$a" "SYSTEM:echo ok" >/dev/null
+  else
+    docker exec -d "${P}-$1" socat "$a" "SYSTEM:echo ok"
+  fi
 }
 
 probe() {
@@ -63,6 +70,8 @@ result F-00 "fw-edge ip nat" ok "$r"
 
 echo "== Testdienste starten"
 for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
+docker rm -f "${P}-ids-socat" >/dev/null 2>&1
+
 listen ids      tcp 8080
 listen siem     udp 5140
 listen client1  tcp 8080
@@ -104,6 +113,7 @@ probe V-12 web      tcp  192.0.2.10  22   fail
 
 echo "== Testdienste beenden"
 for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
+docker rm -f "${P}-ids-socat" >/dev/null 2>&1
 
 echo "== Zaehler verworfener Pakete (Nachweis)"
 for fw in fw-edge fw-dmz fw-backend; do
