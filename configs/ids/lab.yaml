@@ -1,0 +1,42 @@
+%YAML 1.1
+---
+# ids: Ergaenzung zu /etc/suricata/suricata.yaml aus dem Paket (Suricata 8.0.7), geladen mit --include.
+# Jeder Abschnitt hier ersetzt den gleichnamigen Abschnitt der Standarddatei vollstaendig.
+
+af-packet:
+  - interface: eth2
+    threads: 1
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
+
+default-rule-path: /etc/suricata
+rule-files:
+  - local.rules
+
+stats:
+  enabled: no
+
+outputs:
+  - fast:
+      enabled: yes
+      filename: fast.log
+      append: yes
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      # Absender hinter dem proxy aus X-Forwarded-For als Feld "xff"
+      xff:
+        enabled: yes
+        mode: extra-data
+        deployment: reverse
+        header: X-Forwarded-For
+      types:
+        - alert
+        - anomaly:
+            enabled: yes
+        - http:
+            extended: yes
+        - tls:
+            extended: yes

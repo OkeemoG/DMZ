@@ -76,9 +76,19 @@ topology:
         - ip addr add 10.10.10.5/30 dev eth3
         - ip addr add 10.10.10.9/30 dev eth4
         - ip addr add 10.10.10.13/30 dev eth5
-        # eth6: Spiegelausgang zum IDS, noch ohne Adresse
+        # eth6: Spiegelausgang zum IDS, ohne Adresse (V-11)
+        - sysctl -w net.ipv6.conf.eth6.disable_ipv6=1
         - ip route replace default via 10.10.0.1 dev eth1
         - nft -f /etc/nftables.nft
+        # Spiegelung: eingehende Pakete von eth1 bis eth4 als Kopie nach eth6, vor der Filterung
+        - tc qdisc add dev eth1 clsact
+        - tc filter add dev eth1 ingress matchall action mirred egress mirror dev eth6
+        - tc qdisc add dev eth2 clsact
+        - tc filter add dev eth2 ingress matchall action mirred egress mirror dev eth6
+        - tc qdisc add dev eth3 clsact
+        - tc filter add dev eth3 ingress matchall action mirred egress mirror dev eth6
+        - tc qdisc add dev eth4 clsact
+        - tc filter add dev eth4 ingress matchall action mirred egress mirror dev eth6
 
     proxy:
       kind: linux
@@ -106,11 +116,17 @@ topology:
 
     ids:
       kind: linux
-      image: client:0.1
+      image: ids:0.1
+      memory: 512MB
+      binds:
+        - ../configs/ids/lab.yaml:/etc/suricata/lab.yaml:ro
+        - ../configs/ids/local.rules:/etc/suricata/local.rules:ro
       exec:
         - ip addr add 10.10.10.14/30 dev eth1
-        # eth2: Mitschnitt vom Spiegelport, ohne Adresse
         - ip route replace default via 10.10.10.13 dev eth1
+        # eth2: Mitschnitt vom Spiegelport, ohne Adresse (V-11)
+        - sysctl -w net.ipv6.conf.eth2.disable_ipv6=1
+        - suricata --include /etc/suricata/lab.yaml --af-packet -D
 
     #Client-Netz
     router-int:
