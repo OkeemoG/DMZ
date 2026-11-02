@@ -4,7 +4,8 @@
 # Anforderungen: SYS-01, SYS-06, NET-03, NET-06, SEC-02, TST-01, TST-02
 # Aufruf: bash tests/test-matrix.sh   (im Repo-Verzeichnis DMZ, nach make deploy)
 #
-# Methode: Auf den Zielen laufen socat-Dienste, die "ok" antworten. Jeder
+# Methode: Auf den Zielen laufen socat-Dienste. TCP-Dienste antworten "ok", UDP-Dienste
+# schreiben Empfangenes in eine Datei, wie ein Syslog-Empfaenger ohne Antwort. Jeder
 # Negativtest hat also einen echten Dienst am Ziel. Scheitert die Verbindung,
 # liegt das an Firewall, Routing oder Adressumsetzung, nicht an einem fehlenden Dienst.
 # Noch nicht enthalten: K-07, K-08, V-10 (VPN, 3.7), V-11 (Spiegelport, 3.6),
@@ -32,10 +33,12 @@ result() {
 
 listen() {
   local a
-  case "$2" in
-    tcp) a="TCP-LISTEN:$3,fork,reuseaddr" ;;
-    udp) a="UDP-RECVFROM:$3,fork" ;;
-  esac
+  if [ "$2" = "udp" ]; then
+    docker exec "${P}-$1" rm -f "/tmp/udp-$3.log"
+    docker exec -d "${P}-$1" socat -u "UDP-RECV:$3" "OPEN:/tmp/udp-$3.log,creat,append"
+    return
+  fi
+  a="TCP-LISTEN:$3,fork,reuseaddr"
   if [ "$1" = "ids" ]; then
     # ids hat kein socat: Dienst in einem Hilfscontainer im Netz von ids
     docker run -d --rm --name "${P}-ids-socat" --network "container:${P}-ids" client:0.1 socat "$a" "SYSTEM:echo ok" >/dev/null
@@ -44,12 +47,24 @@ listen() {
   fi
 }
 
+node_by_ip() {
+  case "$1" in
+    10.10.30.10) echo siem ;;
+  esac
+}
+
 probe() {
-  local out=""
+  local out="" tok node
   case "$3" in
     tcp)  out=$(x "$2" socat -T2 - "TCP:$4:$5,connect-timeout=2" </dev/null 2>/dev/null) ;;
     conn) x "$2" socat -T1 /dev/null "TCP:$4:$5,connect-timeout=2" >/dev/null 2>&1 && out=ok ;;
-    udp)  out=$(x "$2" sh -c "echo ping | socat -t2 -T2 - UDP:$4:$5" 2>/dev/null) ;;
+    udp)  tok="$1-$2-$$-$RANDOM"
+          node=$(node_by_ip "$4")
+          x "$2" sh -c "echo $tok | socat -u - UDP-SENDTO:$4:$5" >/dev/null 2>&1
+          for _ in 1 2 3 4; do
+            if [ -n "$node" ] && docker exec "${P}-$node" grep -qF "$tok" "/tmp/udp-$5.log" 2>/dev/null; then out=ok; break; fi
+            sleep 0.5
+          done ;;
     icmp) x "$2" ping -c 1 -W 1 "$4" >/dev/null 2>&1 && out=ok ;;
   esac
   [ "$out" = "ok" ] && r=ok || r=fail
