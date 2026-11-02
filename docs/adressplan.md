@@ -1,12 +1,12 @@
 # Adressplan – DMZ
 
-Stand: 2026-10-08, Version 0.1 (Entwurf, passend zu `DMZ_Netzplan_0.2.drawio`)
+Stand: 2026-11-02, Version 0.2 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
 
 ## Regeln
 
 - Das Gateway erhält die erste Adresse des Subnetzes. Hosts beginnen bei `.10`.
 - Das dritte Oktett kennzeichnet die Zone: 0 Transit, 10 DMZ, 20 Client, 30 Backend.
-- `eth0` gehört dem Management-Netz von Containerlab. Eigene Links beginnen bei `eth1`.
+- Die Knoten laufen ohne Management-Netz (`network-mode: none`) und haben kein `eth0`. Eigene Links beginnen bei `eth1`. Jeder Verkehr läuft über den Datenpfad und damit durch die Firewalls (Test T-01, T-03d).
 - Jeder Link verbindet genau zwei Knoten .
 - Die Internet-Adressen stammen aus den Dokumentationsbereichen nach RFC 5737.
 
@@ -29,7 +29,6 @@ Stand: 2026-10-08, Version 0.1 (Entwurf, passend zu `DMZ_Netzplan_0.2.drawio`)
 | Client-Netz | 10.10.20.0/24 | `router-int` – `client1` |
 | Backend-Netz | 10.10.30.0/24 | `fw-backend` – `siem` |
 | VPN-Tunnel | 10.99.0.0/24 | `fw-edge` – `ro-client1`, `ro-client2` |
-| Management (reserviert) | 172.20.20.0/24 | von Containerlab vergeben, alle Knoten |
 
 Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz ist als 10.10.0.0/16 zusammenfassbar.
 
@@ -99,7 +98,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `inet` | keine Routen in 10.0.0.0/8 | – |
 | `ro-client1` | Standard | 198.51.100.1 |
 | `ro-client2` | Standard | 198.51.100.5 |
-| `ro-client1`, `ro-client2` | 10.10.0.0/16 | Tunnel |
+| `ro-client1`, `ro-client2` | 10.10.0.0/16 | Tunnel (geplant) |
 | `fw-edge` | Standard | 203.0.113.1 |
 | `fw-edge` | 10.10.10.0/24 | 10.10.0.2 |
 | `fw-edge` | 10.10.20.0/24 | 10.10.0.6 |
@@ -111,13 +110,14 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `client1` | Standard | 10.10.20.1 |
 | `siem` | Standard | 10.10.30.1 |
 
-Die Clients des Remote Office schicken nur Verkehr für das Firmennetz durch den Tunnel. Der übrige Verkehr geht direkt ins Internet.
+Die Clients des Remote Office schicken nur Verkehr für das Firmennetz durch den Tunnel. Der übrige Verkehr geht direkt ins Internet. Das VPN ist noch nicht umgesetzt, die Tunnel-Adressen und -Routen sind geplant.
 
 ## Adressumsetzung an `fw-edge`
 
 | Richtung | Umsetzung |
 |---|---|
 | Internet → Webanwendung | Ziel 203.0.113.2 wird auf `proxy` 10.10.10.2 umgesetzt |
-| Client-Netz → Internet | Quelle wird auf 203.0.113.2 umgesetzt |
+| Client-Netz → Internet (K-05) | Quelle wird auf 203.0.113.2 umgesetzt |
+| DMZ → Internet (K-06) | Quelle wird auf 203.0.113.2 umgesetzt |
 
 Grund: `inet` kennt keine privaten Netze. Ohne Umsetzung findet keine Antwort den Rückweg.

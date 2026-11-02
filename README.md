@@ -1,69 +1,119 @@
-# Programmentwurf „Aufbau einer DMZ“
+# DMZ-Laborumgebung
 
-## Inhalt
+Programmentwurf „Aufbau einer DMZ“, Sichere Unternehmensnetzwerke (SUN), DHBW. Die Aufgabenstellung steht in [`docs/aufgabenstellung.md`](docs/aufgabenstellung.md).
 
-1. [Aufgabenstellung](#1-aufgabenstellung)
-2. [Abgabe und Bewertung](#2-abgabe-und-bewertung)
+Die gesamte Umgebung läuft als 14 Docker-Container in einer VM und wird mit Containerlab aufgebaut. Die Knoten haben kein Management-Netz. Jeder Verkehr läuft über die nachgebildeten Leitungen und damit durch die Firewalls.
 
-## 1 Aufgabenstellung
+## Aufbau
 
-Der Programmentwurf besteht im Aufbau einer DMZ (Demilitarized Zone) und der Überprüfung der Sicherheit dieser DMZ für eine unternehmenskritische Webanwendung. Die DMZ soll innerhalb einer virtuellen Maschine realisiert werden. Die Systeme der DMZ müssen in Form von Docker-Containern installiert werden. Die Gesamtumgebung muss mit der Software Containerlab aufgebaut werden.
+```
+          attacker          ro-client1      ro-client2
+        192.0.2.10        198.51.100.2    198.51.100.6
+               \                |               /
+                +------------ inet ------------+            Internet
+                                |
+                             fw-edge                         Edge-Firewall, NAT
+                  /             |              \
+              fw-dmz        router-int       fw-backend
+         /    |    |    \       |                |
+     proxy   waf  web   ids   client1          siem
+     .10.2  .10.6 .10.10 .10.14  10.10.20.10     10.10.30.10
+     ---------- DMZ ----------  Client-Netz     Backend-Netz
+```
 
-### Parameter für die VM
+| Knoten | Aufgabe | Stand |
+|---|---|---|
+| `inet` | Router, bildet das Internet nach | umgesetzt |
+| `attacker` | Angreifer im Internet | umgesetzt |
+| `ro-client1`, `ro-client2` | Remote Office | Netz umgesetzt, VPN offen |
+| `fw-edge` | Edge-Firewall zwischen Internet und Firmennetz, NAT | umgesetzt |
+| `fw-dmz` | Firewall der DMZ, Spiegelport zum IDS | umgesetzt |
+| `proxy` | Reverse-Proxy, beendet TLS 1.3 nach BSI TR-02102-2, Ratenbegrenzung, HSTS | umgesetzt |
+| `waf` | ModSecurity v3 mit OWASP CRS 4 | umgesetzt |
+| `web` | Webanwendung (Flask), verwundbar oder sicher umschaltbar | umgesetzt |
+| `ids` | Suricata 8 am Spiegelport von `fw-dmz` | umgesetzt |
+| `router-int` | Router zum Client-Netz | umgesetzt |
+| `client1` | interner Client | umgesetzt |
+| `fw-backend` | Firewall des Backend-Netzes, lässt nur Meldungen an das SIEM durch | umgesetzt |
+| `siem` | Grafana, Loki, Fluent Bit | offen, Platzhalter |
 
-| Parameter | Wert |
+Weg einer Anfrage aus dem Internet: `attacker` → `inet` → `fw-edge` (NAT auf 10.10.10.2) → `fw-dmz` → `proxy` → `fw-dmz` → `waf` → `fw-dmz` → `web`.
+
+Planung und Begründungen: [`docs/adressplan.md`](docs/adressplan.md), [`docs/kommunikationsmatrix.md`](docs/kommunikationsmatrix.md), [`docs/technologieentscheidungen.md`](docs/technologieentscheidungen.md), [`docs/projektplan.md`](docs/projektplan.md).
+
+## Voraussetzungen
+
+| Punkt | Wert |
 |---|---|
-| vCPU | 2 Kerne |
-| RAM | 4 GB |
-| Disk | 10 GB (Docker-Images, Logs, Container FS) |
-| OS | Debian + Docker + containerlab |
+| VM | 2 vCPU, 4 GB RAM, 10 GB Disk |
+| Betriebssystem | Debian mit `sudo`, `curl` und Internetzugang |
+| Benutzer | Benutzer mit `sudo`-Rechten |
+| Netz | Internetzugang ohne VPN für den Bau der Images (siehe Fehlerquellen) |
 
-### Anforderung
+## Installation
 
-Sie implementieren eine DMZ, die den sicheren Betrieb eines firmeninternen Webservers nach dem Stand der Technik ermöglicht. Neben proaktiven Maßnahmen implementieren Sie auch reaktive und detektierende Maßnahmen.
+```
+git clone <Repo-URL> DMZ
+cd DMZ
+bash scripts/install.sh
+```
 
-### Zu erreichendes Ergebnis
+`install.sh` installiert `curl`, `make`, Docker und Containerlab 0.82.0 und nimmt den Benutzer in die Gruppen `docker` und `clab_admins` auf. Am Ende startet eine neue Anmeldung, damit die Gruppen gelten. Dabei fragt das System nach dem Passwort. Eine andere Containerlab-Version: `CLAB_VERSION=0.83.0 bash scripts/install.sh`.
 
-- Bereitstellung einer funktionierenden DMZ bestehend aus den folgenden Einzelsystemen: Firewall, Reverse-Proxy, IDS, WAF und Webserver.
-- Separates internes Netz (Client), das über internen Router angebunden ist.
-- Separates internes Netz (Backend), das über eine Firewall angebunden ist.
-- Remote-Office-Standort (nur Clients).
-- VPN-Verbindung vom Remote-Office-Standort zum Firmennetzwerk.
-- Internet-Netzwerk, das über eine Edge-Firewall vom internen Netz und von der DMZ erreichbar ist.
-- SIEM-System im Backend.
-- Die Funktionsfähigkeit der Systeme und deren Interaktion wird durch Tests nachgewiesen.
-- Die Sicherheitssysteme sind mittels Sicherheitsmaßnahmen gegenüber Angriffen gehärtet, deren Wirksamkeit überprüft wird.
-- Mittels selbst erstellter Cyber-Angriffe, die aus dem Internet (Internet-Netzwerk) und von intern (Client-Netzwerk) ausgeführt werden, überprüfen Sie die Sicherheit der DMZ und des kritischen Webservers.
-- Angriffe werden erkannt und an ein zentrales SIEM-System im Backend-Netzwerk gemeldet und dort übersichtlich in Form von Dashboards für ein SOC visualisiert.
+Prüfen, ob Containerlab grundsätzlich läuft:
 
-Zur Erstellung der DMZ bilden Sie 2er-Teams. Jedes Team entwirft seine eigene DMZ und installiert die dazugehörigen Systeme.
+```
+make test-basic
+```
 
-## 2 Abgabe und Bewertung
+## Betrieb
 
-Der Programmentwurf ist schriftlich zu dokumentieren. Die technischen Inhalte sollen nachvollziehbar, strukturiert und gut verständlich beschrieben werden. Zur Veranschaulichung sind geeignete Diagramme sowie relevante Auszüge aus dem Source Code einzubinden.
-
-Die erstellte VM muss in der virtuellen Laborumgebung der DHBW installiert werden. Die Funktionsfähigkeit, Wirksamkeit und Vollständigkeit wird im Rahmen einer Live-Demo / Abnahme mittels der VM im Labor der DHBW präsentiert. Die Präsentation erfolgt abwechselnd durch die Teilnehmerinnen und Teilnehmer einer Gruppe.
-
-In der Live-Demo sollen sowohl die Qualität des Programmentwurfs, insbesondere der technische Schwierigkeitsgrad, als auch die Quantität, also die Vollständigkeit der Umsetzung, deutlich werden. Die Demonstration muss verständlich durch den Programmentwurf führen und die eingesetzten Methoden und Entscheidungen erläutern sowie die erzielten Ergebnisse anschaulich darstellen.
-
-Die Dokumentation, der erstellte Source Code sowie die Präsentationsfolien sind final in den Moodle-Kurs hochzuladen.
-
-### Bewertungskriterien: Funktionsnachweis / Abnahme des Programmentwurfes (50 Punkte)
-
-| Bewertungskriterium | Beschreibung |
+| Befehl | Wirkung |
 |---|---|
-| Quantität / Vollständigkeit | • Die DMZ sowie die angebundenen Netzwerke, insbesondere Internet, Client-Netz und Backend-Netz, sind vollständig umgesetzt und nachvollziehbar dokumentiert.<br>• Die wesentlichen Systemkomponenten sind integriert und in der Live-Demo sichtbar.<br>• Es werden mindestens drei Cyberangriffe demonstriert, mit denen die Sicherheitsmechanismen des Systems überprüft und bestätigt werden.<br>• Erkannte Angriffe werden innerhalb 1 s im Monitoring-System für einen Operator verständlich angezeigt. |
-| Qualität / Funktionsfähigkeit | • Das System beziehungsweise die Software läuft während der Live-Präsentation stabil und ohne wesentliche Fehler.<br>• Die gezeigten Angriffe, Gegenmaßnahmen und Teilsysteme sind funktionsfähig und fachlich plausibel.<br>• Die Live-Angriffe auf die DMZ weisen einen hohen technischen Schwierigkeitsgrad auf und zeigen ein vertieftes Verständnis der Sicherheitsmechanismen.<br>• Grenzen des Programmentwurfes und zukünftige Verbesserungen werden transparent erläutert. |
-| Zeitvorgabe | • Die Präsentation darf 15 Minuten nicht überschreiten. Bei Zeitüberschreitung werden pro angefangener Minute 3 Punkte abgezogen. Beispiele: 16:00 Minuten = 3 Punkte Abzug, 17:00 Minuten = 6 Punkte Abzug. |
+| `make images` | Baut alle Images |
+| `make deploy` | Baut die Images und startet die Topologie neu |
+| `make destroy` | Stoppt die Topologie und räumt auf |
+| `make test-all` | Führt alle Tests aus und meldet am Ende `ALL TESTS PASSED` oder die fehlgeschlagenen Tests |
 
-### Bewertungskriterien: Dokumentation, Design, Methoden, Installation (50 Punkte)
+Der Webserver läuft standardmäßig verwundbar, damit die Angriffe etwas zum Angreifen haben. Sicherer Modus:
 
-| Bewertungskriterium | Beschreibung |
+```
+APP_MODE=secure make deploy
+```
+
+## Tests
+
+| Befehl | Prüft |
 |---|---|
-| Methodenkompetenz | • Das Vorgehen beim Entwurf, bei der Umsetzung, beim Test und bei der Integration der Systeme beziehungsweise der Software wird nachvollziehbar dargestellt.<br>• Entscheidungen im Entwicklungsprozess werden begründet.<br>• Eingesetzte Methoden werden erläutert.<br>• Die Gruppe zeigt, dass sie planvoll, strukturiert und methodisch gearbeitet hat. |
-| Dokumentation | • Die Dokumentation besitzt einen professionellen Aufbau mit Titelblatt, Inhaltsverzeichnis, Einleitung, Zielsetzung, theoretischen Grundlagen, Design, eingesetzten Methoden, Test und Evaluation, Fazit sowie Quellen- und Hilfsmittelverzeichnis.<br>• Einsatzzweck, Architektur und Funktionsweise der Software und der einzelnen Systeme werden fachlich präzise und verständlich beschrieben.<br>• Diagramme veranschaulichen Funktionsweise, Datenflüsse, Netzwerkstruktur, Sicherheitsmechanismen und zentrale Komponenten. |
-| Design | • Das technische Design ist fachlich begründet, konsistent und passend zum Einsatzzweck. Die gewählte Architektur, die Netzsegmentierung, die Sicherheitsmechanismen und die eingesetzten Technologien werden nachvollziehbar hergeleitet. Risiken, Annahmen, Grenzen der Lösung und mögliche Verbesserungen werden angemessen reflektiert. |
-| Funktionsfähigkeit | • Die Wirksamkeit und Funktionalität der Sicherheitsmaßnahmen werden durch geeignete Tests, Messergebnisse, Screenshots, Protokolle oder andere Nachweise belegt.<br>• Die Testfälle werden nachvollziehbar beschrieben, die Ergebnisse fachlich eingeordnet und mit der Zielsetzung des Programmentwurfs verknüpft. |
-| Installation | • Die Installationsanleitung ist verständlich, vollständig und praktisch nachvollziehbar.<br>• Die Installation basiert auf automatisierten Skripten, zum Beispiel *.yaml, *.sh oder vergleichbaren Dateien, die zusammen mit der Abgabe im Moodle-Kurs bereitgestellt werden.<br>• Voraussetzungen, Konfigurationsschritte, Start der Systeme, Tests der Installation und mögliche Fehlerquellen werden klar beschrieben. |
-| Inhalts- und Quellenverzeichnis | • Die Dokumentation enthält ein vollständiges Inhaltsverzeichnis sowie ein nachvollziehbares Quellenverzeichnis.<br>• Verwendete Hilfsmittel wie zum Beispiel Tools und KI-Werkzeuge werden vollständig angegeben und deren Einsatz angemessen erläutert. |
-| Selbstständigkeitserklärung | • Die Selbstständigkeitserklärung ist vollständig enthalten und von allen Gruppenteilnehmerinnen und Gruppenteilnehmern unterschrieben. |
+| `make test-images` | Alle Images enthalten ihre Werkzeuge |
+| `make test-topology` | Adressen, Routen, Nachbarn, Ende-zu-Ende-Verbindungen, Rechte im Container |
+| `make test-matrix` | Jede erlaubte und verbotene Verbindung der Kommunikationsmatrix |
+| `make test-proxy` | Kette bis zum Webserver, echte Client-Adresse, TLS nach BSI, HSTS, Ratenbegrenzung |
+| `make test-waf` | Normale Anfragen kommen durch, Angriffe werden geblockt und protokolliert |
+| `make test-ids` | Suricata, Spiegelport, Erkennung mit echter Client-Adresse |
+| `make test-web` | Webanwendung in beiden Betriebsarten, eigene Container außerhalb der Topologie |
+
+Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie voraus (`make deploy`).
+
+## Verzeichnisse
+
+| Pfad | Inhalt |
+|---|---|
+| `topology/dmz.clab.yml` | Knoten, Images, Adressen, Routen, Leitungen, eingebundene Konfiguration |
+| `images/` | Ein Dockerfile je Image, dazu der Code der Webanwendung |
+| `configs/` | Konfiguration je Knoten: Firewall-Regeln, Proxy, WAF, IDS |
+| `scripts/` | `install.sh`, `build-images.sh` |
+| `tests/` | Ein Testskript je Thema |
+| `docs/` | Aufgabenstellung, Planung, Netzpläne |
+| `quellen/` | BSI TR-02102-1 und TR-02102-2 |
+
+## Fehlerquellen
+
+| Meldung | Ursache | Lösung |
+|---|---|---|
+| `apk` meldet `I/O error` oder `no such package` beim Bau | Ein VPN verkleinert die MTU, große Downloads brechen ab | VPN trennen. Falls ein VPN nötig ist: `{ "mtu": 1400 }` in `/etc/docker/daemon.json`, dann `sudo systemctl restart docker` |
+| `failed to extract … I/O error` | Disk voll | `df -h /` prüfen, `docker builder prune -af` und `docker image prune -f` |
+| Tests schlagen nach `git pull` breit fehl, z. B. Suricata fehlt | Es läuft noch die alte Topologie | `make deploy` |
+| `test-waf` oder `test-proxy` direkt nach dem Start fehlgeschlagen | WAF noch im Zustand `health: starting` | Die Tests warten bis 60 s. Danach `docker inspect clab-dmz-waf` prüfen |
+| `permission denied` bei `docker` oder `containerlab` | Gruppen nach der Installation noch nicht aktiv | Neu anmelden |
+| `make` meldet `missing separator` | Befehle im Makefile mit Leerzeichen statt Tab eingerückt | Tab verwenden |

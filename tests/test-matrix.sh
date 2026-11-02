@@ -9,8 +9,6 @@
 # liegt das an Firewall, Routing oder Adressumsetzung, nicht an einem fehlenden Dienst.
 # Noch nicht enthalten: K-07, K-08, V-10 (VPN, 3.7), V-11 (Spiegelport, 3.6),
 # K-10, K-11 (Meldungen der Firewalls selbst, Phase 4).
-# Seit 3.3 ist proxy ein Nginx ohne socat: Ziele auf proxy werden mit "conn"
-# (Verbindungsaufbau) geprueft, K-02 prueft tests/test-proxy.sh (P-02) Ende zu Ende.
 set -uo pipefail
 
 P="clab-dmz"
@@ -27,7 +25,7 @@ result() {
   if [ "$3" = "$4" ]; then
     echo "OK     $1 $2"
   else
-    echo "FEHLER $1 $2 (erwartet: $3, Ergebnis: $4)"
+    echo "FAIL   $1 $2 (expected: $3, got: $4)"
     fail=1
   fi
 }
@@ -60,7 +58,7 @@ probe() {
   result "$1" "$d" "$6" "$r"
 }
 
-echo "== F-00 Regelwerke geladen"
+echo "== F-00 Rule sets loaded"
 for fw in fw-edge fw-dmz fw-backend; do
   if x "$fw" nft list table inet filter >/dev/null 2>&1; then r=ok; else r=fail; fi
   result F-00 "$fw inet filter" ok "$r"
@@ -68,7 +66,7 @@ done
 if x fw-edge nft list table ip nat >/dev/null 2>&1; then r=ok; else r=fail; fi
 result F-00 "fw-edge ip nat" ok "$r"
 
-echo "== Testdienste starten"
+echo "== Start test services"
 for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 docker rm -f "${P}-ids-socat" >/dev/null 2>&1
 
@@ -80,7 +78,7 @@ listen attacker tcp 443
 listen attacker tcp 22
 sleep 1
 
-echo "== Erlaubte Verbindungen"
+echo "== Allowed connections"
 probe K-01 attacker conn 203.0.113.2 443  ok
 probe K-01 attacker conn 203.0.113.2 80   ok
 probe K-02 proxy    conn 10.10.10.6  8080 ok
@@ -95,7 +93,7 @@ probe K-06 ids      icmp 192.0.2.10  -    ok
 probe K-09 waf      udp  10.10.30.10 5140 ok
 probe K-09 ids      udp  10.10.30.10 5140 ok
 
-echo "== Verbotene Verbindungen"
+echo "== Forbidden connections"
 probe V-01 attacker tcp  10.10.20.10 8080 fail
 probe V-02 attacker conn 10.10.10.10 8080 fail
 probe V-03 client1  conn 10.10.10.10 8080 fail
@@ -111,21 +109,21 @@ probe V-07 web      udp  10.10.30.10 5140 fail
 probe V-08 siem     tcp  192.0.2.10  443  fail
 probe V-12 web      tcp  192.0.2.10  22   fail
 
-echo "== Testdienste beenden"
+echo "== Stop test services"
 for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 docker rm -f "${P}-ids-socat" >/dev/null 2>&1
 
-echo "== Zaehler verworfener Pakete (Nachweis)"
+echo "== Dropped packet counters (evidence)"
 for fw in fw-edge fw-dmz fw-backend; do
   for chain in input forward; do
     c=$(x "$fw" nft list chain inet filter "$chain" 2>/dev/null | grep 'comment "verworfen"' | sed 's/^[[:space:]]*//')
-    echo "   $fw $chain: ${c:-nicht gefunden}"
+    echo "   $fw $chain: ${c:-not found}"
   done
 done
 
 if [ "$fail" -eq 0 ]; then
-  echo "ERGEBNIS: bestanden"
+  echo "RESULT: passed"
 else
-  echo "ERGEBNIS: nicht bestanden"
+  echo "RESULT: failed"
   exit 1
 fi

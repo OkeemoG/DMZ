@@ -28,6 +28,17 @@ weblog() {
   docker logs "${P}-web" 2>&1 | grep -F -- "$1" | tail -1
 }
 
+wait_healthy() {
+  local s
+  for _ in $(seq 60); do
+    s=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${P}-$1" 2>/dev/null)
+    if [ "$s" = "healthy" ] || [ "$s" = "none" ]; then echo "$s"; return 0; fi
+    sleep 1
+  done
+  echo "${s:-unknown}"
+  return 1
+}
+
 srcip() {
   printf '%s' "$1" | sed -n 's/.*"src_ip": *"\([^"]*\)".*/\1/p'
 }
@@ -42,6 +53,8 @@ result P-00 "private key readable by root only" 600 "$(x proxy stat -c '%a' /etc
 echo "== P-01 Redirect"
 out=$(x attacker curl -s -o /dev/null -w '%{http_code} %{redirect_url}' http://203.0.113.2/test 2>/dev/null)
 result P-01 "HTTP 80 redirects to HTTPS" "301 https://203.0.113.2/test" "$out"
+
+result P-00 "waf container healthy before end-to-end tests" yes "$(wait_healthy waf >/dev/null && echo yes || echo no)"
 
 echo "== P-02 End to end: Internet -> proxy -> waf -> web (K-01, K-02, K-03)"
 body=$(x attacker curl -sk "https://203.0.113.2/health?id=${RUN}-02" 2>/dev/null)
@@ -65,6 +78,7 @@ echo "== P-06 Header hardening"
 hdr=$(x attacker curl -skI https://203.0.113.2/health 2>/dev/null | tr -d '\r')
 result P-06 "Server header without version" yes "$(has "$hdr" '^[Ss]erver: nginx$')"
 result P-06 "no upstream Server header leaked" no "$(has "$hdr" '^[Ss]erver: web')"
+result P-06 "HSTS header set" yes "$(has "$hdr" '^[Ss]trict-[Tt]ransport-[Ss]ecurity: max-age=31536000$')"
 
 echo "== P-07 TLS according to BSI TR-02102-2"
 out=$(tls)
