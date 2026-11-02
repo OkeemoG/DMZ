@@ -1,5 +1,4 @@
-# Image webserver:
-FROM python:3.12-alpine3.20
+FROM python:3.12-alpine3.24
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -15,4 +14,4 @@ COPY app/ /app/
 
 EXPOSE 8080
 
-CMD ["gunicorn", "--user", "app", "--group", "app", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "10", "app:app"]
+CMD ["gunicorn", "--config", "gunicorn.conf.py", "--preload", "--user", "app", "--group", "app", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "10", "app:app"]
