@@ -36,10 +36,9 @@ wait_for() {
 
 poll() {
   docker exec -i "${P}-siem" sh -s "$1" <<'POLL'
-q="{job=\"dmz\", host=\"waf\", ident=\"dmztest\"} |= \"$1\""
 i=0
 while [ "$i" -lt 150 ]; do
-  if curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$q" --data-urlencode limit=1 | grep -q '"result":\[{'; then
+  if curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=1 | grep -q '"result":\[{'; then
     cut -d' ' -f1 /proc/uptime
     exit 0
   fi
@@ -48,6 +47,22 @@ while [ "$i" -lt 150 ]; do
 done
 echo timeout
 POLL
+}
+
+lines() {
+  x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=50 2>/dev/null
+}
+
+elapsed() {
+  if [ "$2" = "timeout" ] || [ -z "$2" ] || [ -z "$1" ]; then echo 99999; else echo $(( (${2/./} - ${1/./}) * 10 )); fi
+}
+
+attack() {
+  docker exec -i "${P}-attacker" sh -s "$1" <<'ATTACK'
+t=$(cut -d' ' -f1 /proc/uptime)
+curl -sk -o /dev/null --data-urlencode "username=admin' OR '1'='1" --data-urlencode "password=x" "https://203.0.113.2/login?id=$1"
+echo "$t"
+ATTACK
 }
 
 send() {
@@ -83,20 +98,14 @@ tmp=$(mktemp)
 lat=()
 for i in $(seq "$SAMPLES"); do
   tok="${RUN}-${i}"
-  poll "$tok" > "$tmp" &
+  poll "{job=\"dmz\", host=\"waf\", ident=\"dmztest\"} |= \"$tok\"" > "$tmp" &
   pid=$!
   sleep 0.3
   sent=$(send "$tok" | tail -1)
   wait "$pid"
-  found=$(tr -d '\r\n' < "$tmp")
-  if [ "$found" = "timeout" ] || [ -z "$found" ] || [ -z "$sent" ]; then
-    echo "   sample $i: not found"
-    lat+=(99999)
-  else
-    ms=$(( (${found/./} - ${sent/./}) * 10 ))
-    echo "   sample $i: ${ms} ms"
-    lat+=("$ms")
-  fi
+  ms=$(elapsed "$sent" "$(tr -d '\r\n' < "$tmp")")
+  if [ "$ms" = "99999" ]; then echo "   sample $i: not found"; else echo "   sample $i: ${ms} ms"; fi
+  lat+=("$ms")
 done
 rm -f "$tmp"
 min=${lat[0]}; max=${lat[0]}; sum=0
@@ -107,6 +116,24 @@ for v in "${lat[@]}"; do
 done
 echo "   min ${min} ms, avg $((sum / ${#lat[@]})) ms, max ${max} ms (resolution about 20 ms)"
 result S-02 "every message searchable in Loki within ${LIMIT_MS} ms" yes "$([ "$max" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+
+echo "== S-03 WAF reports attacks to the SIEM (K-09)"
+tok="${RUN}-waf"
+tmp=$(mktemp)
+poll "{job=\"dmz\", host=\"waf\", ident=\"modsecurity\"} |= \"$tok\" |= \"Access denied\"" > "$tmp" &
+pid=$!
+sleep 0.3
+sent=$(attack "$tok" | tail -1)
+wait "$pid"
+ms=$(elapsed "$sent" "$(tr -d '\r\n' < "$tmp")")
+rm -f "$tmp"
+waf=$(lines "{job=\"dmz\", host=\"waf\", ident=\"modsecurity\"} |= \"$tok\"")
+result S-03 "blocked SQL injection reported by waf" yes "$([ "$ms" != "99999" ] && echo yes || echo no)"
+result S-03 "report names the attack rule (942xxx, SQL injection)" yes "$(has "$waf" '942[0-9]{3}')"
+result S-03 "report names the real attacker 192.0.2.10" yes "$(has "$waf" 'client: 192\.0\.2\.10')"
+result S-03 "attack visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+noise=$(lines '{job="dmz", host="waf", ident="modsecurity"} != "ModSecurity: "')
+result S-03 "nginx messages without ModSecurity are filtered out" no "$(has "$noise" '"result":\[\{')"
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-collector" "${P}-siem-loki" "${P}-siem-grafana" 2>/dev/null

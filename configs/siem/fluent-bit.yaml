@@ -16,6 +16,14 @@ pipeline:
       parser: dmz-syslog
       source_address_key: src_addr
 
+  filters:
+    - name: grep
+      match: '*'
+      logical_op: and
+      exclude:
+        - ident ^modsecurity$
+        - 'message ^(?!.*ModSecurity: )'
+
   outputs:
     - name: loki
       match: '*'
