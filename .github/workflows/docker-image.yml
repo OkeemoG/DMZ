@@ -1,0 +1,41 @@
+name: CI-Tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Containerlab installieren (gleiche Version wie auf der VM)
+        run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.79.0
+      - name: Images bauen und Labor starten
+        run: |
+          make images
+          sudo containerlab deploy -t topology/dmz.clab.yml --reconfigure
+      - name: test-images
+        run: make test-images
+      - name: test-topology
+        if: success() || failure()
+        run: make test-topology
+      - name: test-matrix
+        if: success() || failure()
+        run: make test-matrix
+      - name: test-proxy
+        if: success() || failure()
+        run: make test-proxy
+      - name: test-web
+        if: success() || failure()
+        run: make test-web
+      - name: test-waf
+        if: success() || failure()
+        run: make test-waf
+      - name: test-ids
+        if: success() || failure()
+        run: make test-ids
+      - name: Labor abbauen
+        if: always()
+        run: sudo containerlab destroy -t topology/dmz.clab.yml --cleanup
