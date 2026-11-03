@@ -23,6 +23,16 @@ has() {
   if printf '%s' "$1" | grep -qE -- "$2"; then echo yes; else echo no; fi
 }
 
+loki_ready() {
+  local s=""
+  for _ in $(seq 60); do
+    s=$(x siem curl -s http://127.0.0.1:3100/ready 2>/dev/null | tr -d '\r\n')
+    [ "$s" = "ready" ] && break
+    sleep 1
+  done
+  echo "$s"
+}
+
 poll() {
   docker exec -i "${P}-siem" sh -s "$1" <<'POLL'
 q="{job=\"dmz\", host=\"waf\", ident=\"dmztest\"} |= \"$1\""
@@ -51,9 +61,13 @@ echo "== S-00 Services"
 for n in siem siem-collector siem-loki siem-grafana; do
   result S-00 "$n running" true "$(docker inspect -f '{{.State.Running}}' "${P}-$n" 2>/dev/null)"
 done
-result S-00 "Loki ready" ready "$(x siem curl -s http://127.0.0.1:3100/ready 2>/dev/null | tr -d '\r\n')"
+result S-00 "Loki ready (waits up to 60 s after start)" ready "$(loki_ready)"
 result S-00 "Grafana healthy" yes "$(has "$(x siem curl -s http://127.0.0.1:3000/api/health 2>/dev/null)" '"database": *"ok"')"
 result S-00 "Loki data source provisioned in Grafana" yes "$(has "$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/datasources/uid/loki 2>/dev/null)" '"type": *"loki"')"
+
+for n in siem-collector siem-loki siem-grafana; do
+  result S-00 "$n not killed for lack of memory, no restarts" "false 0" "$(docker inspect -f '{{.State.OOMKilled}} {{.RestartCount}}' "${P}-$n" 2>/dev/null)"
+done
 
 echo "== S-01 Management access (K-12)"
 result S-01 "Grafana reachable from the VM on port 3000" yes "$(has "$(curl -s -m 3 http://127.0.0.1:3000/api/health 2>/dev/null)" '"database": *"ok"')"
@@ -92,6 +106,9 @@ for v in "${lat[@]}"; do
 done
 echo "   min ${min} ms, avg $((sum / ${#lat[@]})) ms, max ${max} ms (resolution about 20 ms)"
 result S-02 "every message searchable in Loki within ${LIMIT_MS} ms" yes "$([ "$max" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+
+echo "== Resources"
+docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-collector" "${P}-siem-loki" "${P}-siem-grafana" 2>/dev/null
 
 if [ "$fail" -eq 0 ]; then
   echo "RESULT: passed"
