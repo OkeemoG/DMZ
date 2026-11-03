@@ -178,9 +178,64 @@ topology:
     siem:
       kind: linux
       image: client:0.1
+      network-mode: bridge
+      ports:
+        - 3000:3000
+      binds:
+        - ../configs/siem/mgmt-routing.sh:/etc/siem/mgmt-routing.sh:ro
       exec:
         - ip addr add 10.10.30.10/24 dev eth1
-        - ip route replace default via 10.10.30.1 dev eth1
+        - sh /etc/siem/mgmt-routing.sh
+
+    siem-collector:
+      kind: linux
+      image: fluent/fluent-bit:5.1.5
+      network-mode: container:siem
+      memory: 64MB
+      cmd: -c /fluent-bit/etc/dmz.yaml
+      binds:
+        - ../configs/siem/fluent-bit.yaml:/fluent-bit/etc/dmz.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
+
+    siem-loki:
+      kind: linux
+      image: grafana/loki:3.7.9
+      network-mode: container:siem
+      memory: 256MB
+      binds:
+        - ../configs/siem/loki.yaml:/etc/loki/local-config.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
+
+    siem-grafana:
+      kind: linux
+      image: grafana/grafana:13.3.0
+      network-mode: container:siem
+      memory: 384MB
+      env:
+        GF_SECURITY_ADMIN_USER: admin
+        GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:=dmz-soc}
+        GF_USERS_ALLOW_SIGN_UP: "false"
+        GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+        GF_ANALYTICS_REPORTING_ENABLED: "false"
+        GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+        GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+        GF_PLUGINS_PREINSTALL_DISABLED: "true"
+        GF_NEWS_NEWS_FEED_ENABLED: "false"
+      binds:
+        - ../configs/siem/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/dmz.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
 
   links:
     # Internet und Remote Office

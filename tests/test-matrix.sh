@@ -5,7 +5,8 @@
 # Aufruf: bash tests/test-matrix.sh   (im Repo-Verzeichnis DMZ, nach make deploy)
 #
 # Methode: Auf den Zielen laufen socat-Dienste. TCP-Dienste antworten "ok", UDP-Dienste
-# schreiben Empfangenes in eine Datei, wie ein Syslog-Empfaenger ohne Antwort. Jeder
+# schreiben Empfangenes in eine Datei. Fuer siem gilt eine UDP-Meldung als angekommen,
+# wenn sie in Loki auffindbar ist (Fluent Bit -> Loki). Jeder
 # Negativtest hat also einen echten Dienst am Ziel. Scheitert die Verbindung,
 # liegt das an Firewall, Routing oder Adressumsetzung, nicht an einem fehlenden Dienst.
 # Noch nicht enthalten: K-07, K-08, V-10 (VPN, 3.7), V-11 (Spiegelport, 3.6),
@@ -47,6 +48,14 @@ listen() {
   fi
 }
 
+received() {
+  if [ "$1" = "siem" ]; then
+    x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query={job=\"dmz\"} |= \"$3\"" --data-urlencode "limit=1" 2>/dev/null | grep -q '"result":\[{'
+  else
+    docker exec "${P}-$1" grep -qF "$3" "/tmp/udp-$2.log" 2>/dev/null
+  fi
+}
+
 node_by_ip() {
   case "$1" in
     10.10.30.10) echo siem ;;
@@ -60,9 +69,9 @@ probe() {
     conn) x "$2" socat -T1 /dev/null "TCP:$4:$5,connect-timeout=2" >/dev/null 2>&1 && out=ok ;;
     udp)  tok="$1-$2-$$-$RANDOM"
           node=$(node_by_ip "$4")
-          x "$2" sh -c "echo $tok | socat -u - UDP-SENDTO:$4:$5" >/dev/null 2>&1
-          for _ in 1 2 3 4; do
-            if [ -n "$node" ] && docker exec "${P}-$node" grep -qF "$tok" "/tmp/udp-$5.log" 2>/dev/null; then out=ok; break; fi
+          x "$2" sh -c "echo \"<134>\$(date '+%b %e %H:%M:%S') $2 dmztest: $tok\" | socat -u - UDP-SENDTO:$4:$5" >/dev/null 2>&1
+          for _ in 1 2 3 4 5 6; do
+            if [ -n "$node" ] && received "$node" "$5" "$tok"; then out=ok; break; fi
             sleep 0.5
           done ;;
     icmp) x "$2" ping -c 1 -W 1 "$4" >/dev/null 2>&1 && out=ok ;;
@@ -86,7 +95,6 @@ for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done
 docker rm -f "${P}-ids-socat" >/dev/null 2>&1
 
 listen ids      tcp 8080
-listen siem     udp 5140
 listen client1  tcp 8080
 listen attacker tcp 80
 listen attacker tcp 443

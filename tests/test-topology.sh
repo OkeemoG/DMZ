@@ -40,9 +40,16 @@ for n in "${NODES[@]}"; do
   result T-01 "$n IPv4 default route" "$exp" "$r"
   if [ -n "$def6" ]; then r=present; else r=none; fi
   result T-01 "$n IPv6 default route" none "$r"
+  if [ "$n" = "siem" ]; then
+    exp=present; d="$n has eth0 for management access only (K-12)"
+  else
+    exp=missing; d="$n without eth0 (management network)"
+  fi
   if x "$n" ip link show eth0 >/dev/null 2>&1; then r=present; else r=missing; fi
-  result T-01 "$n without eth0 (management network)" missing "$r"
+  result T-01 "$d" "$exp" "$r"
 done
+rules=$(x siem ip rule show 2>/dev/null)
+result T-01 "siem answers management traffic via table 100 only" yes "$(printf '%s' "$rules" | grep -q 'lookup 100' && echo yes || echo no)"
 
 echo "== T-02 Neighbours"
 ping_test T-02 inet       203.0.113.2  ok
