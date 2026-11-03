@@ -23,14 +23,15 @@ has() {
   if printf '%s' "$1" | grep -qE -- "$2"; then echo yes; else echo no; fi
 }
 
-loki_ready() {
-  local s=""
-  for _ in $(seq 60); do
-    s=$(x siem curl -s http://127.0.0.1:3100/ready 2>/dev/null | tr -d '\r\n')
-    [ "$s" = "ready" ] && break
+wait_for() {
+  local tries="$1" pattern="$2" out=""
+  shift 2
+  for _ in $(seq "$tries"); do
+    out=$("$@" 2>/dev/null)
+    if printf '%s' "$out" | grep -qE -- "$pattern"; then echo yes; return; fi
     sleep 1
   done
-  echo "$s"
+  echo no
 }
 
 poll() {
@@ -61,8 +62,8 @@ echo "== S-00 Services"
 for n in siem siem-collector siem-loki siem-grafana; do
   result S-00 "$n running" true "$(docker inspect -f '{{.State.Running}}' "${P}-$n" 2>/dev/null)"
 done
-result S-00 "Loki ready (waits up to 60 s after start)" ready "$(loki_ready)"
-result S-00 "Grafana healthy" yes "$(has "$(x siem curl -s http://127.0.0.1:3000/api/health 2>/dev/null)" '"database": *"ok"')"
+result S-00 "Loki ready (waits up to 60 s after start)" yes "$(wait_for 60 '^ready' x siem curl -s http://127.0.0.1:3100/ready)"
+result S-00 "Grafana healthy (waits up to 120 s after start)" yes "$(wait_for 120 '"database": *"ok"' x siem curl -s http://127.0.0.1:3000/api/health)"
 result S-00 "Loki data source provisioned in Grafana" yes "$(has "$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/datasources/uid/loki 2>/dev/null)" '"type": *"loki"')"
 
 for n in siem-collector siem-loki siem-grafana; do
