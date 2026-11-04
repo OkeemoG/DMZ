@@ -1,17 +1,17 @@
 # Projektplan – DMZ-Laborumgebung
 
-Stand: 2026-10-08, Version 0.1. Grober Umriss.
+Stand: 2026-11-02, Version 0.2.
 
 ## Ergebnisse der Phase 1
 
 | Ergebnis | Datei | Stand |
 |---|---|---|
-| Anforderungsliste | Projektwissen, `docs/anforderungen.md` | 0.4, A-01 bis A-05 entschieden |
-| Netzplan mit Zonenmodell | `docs/diagrams/DMZ_Netzplan_0.5.drawio` | 0.2 |
-| Adressplan | `docs/adressplan.md` | 0.1 |
-| Kommunikationsmatrix | `docs/kommunikationsmatrix.md` | 0.1 |
-| Technologieentscheidungen | `docs/technologieentscheidungen.md` | 0.1, am 2026-10-08 bestätigt |
-| Ressourcenbudget, Umriss | diese Datei | 0.1 |
+| Anforderungsliste | Projektwissen, nicht im Repo | 0.4, A-01 bis A-05 entschieden |
+| Netzplan mit Zonenmodell | `docs/DMZ_Netzplan_0.2.drawio` | 0.2 |
+| Adressplan | `docs/adressplan.md` | 0.2 |
+| Kommunikationsmatrix | `docs/kommunikationsmatrix.md` | 0.2 |
+| Technologieentscheidungen | `docs/technologieentscheidungen.md` | 0.2 |
+| Ressourcenbudget | diese Datei | 0.2 |
 
 ## Festgelegter Stack
 
@@ -34,7 +34,7 @@ Alle Werte sind Schätzungen. Die erste Messung folgt am Ende von Phase 2.
 
 | Gruppe | Knoten | Schätzung | Grenze je Knoten | Summe der Grenzen |
 |---|---|---|---|---|
-| Netzknoten (`lab-net`) | 9 | je 5–25 MB | 64 MB | 576 MB |
+| Netzknoten (`fw`, `router`, `client`) | 9 | je 5–25 MB | 64 MB | 576 MB |
 | `proxy` | 1 | 10–30 MB | 64 MB | 64 MB |
 | `waf` | 1 | 60–150 MB | 256 MB | 256 MB |
 | `web` | 1 | 30–80 MB | 128 MB | 128 MB |
@@ -62,12 +62,23 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 - CPU: keine Grenzen zu Beginn. Suricata und Grafana sind die einzigen Knoten mit nennenswerter Last.
 - Messung nach jeder Phase mit `docker stats --no-stream`, `docker system df`, `free -m` und `df -h /`. Die Werte gehen in die Systeminfo.
 
+## Stand der Umsetzung (2026-11-02)
+
+| Phase | Stand |
+|---|---|
+| 2 Grundaufbau | Erledigt. 14 Knoten ohne Management-Netz, Adressen und Routen nach Adressplan (T-01 bis T-03), Rechte im Container (R-03). |
+| 3 Sicherheitssysteme | Firewalls nach Matrix 0.2, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4). |
+| 4 Logging und SIEM | Offen. |
+| 5 bis 8 | Offen. Grundlagen für die Angriffe liegen vor: verwundbare Webanwendung, WAF und IDS mit Erkennung. |
+
+Alle Tests laufen mit `make test-all` (Ablauf siehe `README.md`).
+
 ## Umsetzungsreihenfolge
 
 ### Phase 2 – Grundaufbau
 
-1. Image `lab-net` bauen.
-2. Topologie `topology/dmz.clab.yml` mit allen 14 Knoten. Systeme ohne fertiges Image starten zunächst als `lab-net`.
+1. Images `fw`, `router` und `client` bauen (E-01).
+2. Topologie `topology/dmz.clab.yml` mit allen 14 Knoten. Systeme ohne fertiges Image starten zunächst mit dem Image `client`.
 3. Adressen und Routen nach Adressplan. Standardroute über das Management-Netz ersetzen.
 4. Tests T-01 bis T-03: Adressen, Nachbarn, Ende zu Ende.
 5. Rechte im Container prüfen: nftables, tc, WireGuard (R-03).
@@ -101,54 +112,49 @@ Ergebnis: Jede Zeile der Matrix ist getestet, erlaubt wie verboten.
 ## Ordnerstruktur im Repo
 
 ```
-SUN_DMZ/
-├── Makefile
-├── README.md
-├── scripts/install.sh
-├── topology/
-│   ├── dmz.clab.yml
-│   └── test/basicTest.clab.yml
-├── images/            # lab-net, lab-web, lab-ids, lab-siem
-├── configs/           # ein Ordner pro Knoten: fw-edge, fw-dmz, fw-backend,
-│                      # router-int, proxy, waf, web, ids, siem, ro-client1, ro-client2
-├── attacks/
-├── tests/
-└── docs/
-    ├── adressplan.md
-    ├── kommunikationsmatrix.md
-    ├── technologieentscheidungen.md
-    ├── projektplan.md
-    └── diagrams/DMZ_Netzplan_0.5.drawio
+DMZ/
+├── Makefile           # Bau, Start, Tests (make test-all)
+├── README.md          # Installation und Betrieb
+├── scripts/           # install.sh, build-images.sh
+├── topology/          # dmz.clab.yml, basicTest.clab.yml
+├── images/            # fw, router, client, proxy, waf, web, ids
+├── configs/           # fw-edge, fw-dmz, fw-backend, proxy, waf, ids
+├── tests/             # ein Testskript je Thema
+├── quellen/           # BSI TR-02102-1 und TR-02102-2
+└── docs/              # Aufgabenstellung, Planung, Netzpläne
 ```
 
-Ordner entstehen mit der ersten Datei.
+Geplant: `images/siem`, `configs/siem`, `attacks/`.
 
 ## Abgleich mit den Bewertungskriterien
 
-| Kriterium | Stand nach Phase 1 |
+| Kriterium | Stand am 2026-11-02 |
 |---|---|
-| Vollständigkeit der Netze und Systeme | Im Entwurf vollständig. |
+| Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver umgesetzt und getestet. Offen: VPN, SIEM. |
 | Drei Angriffe, hoher Schwierigkeitsgrad | Nicht entworfen. Phase 6. |
 | Anzeige innerhalb von 1 s | Risiko R-01. Phase 4. |
-| Stabilität in der Demo | Offen. Speichergrenzen und Reserve sind eingeplant. |
-| Methodenkompetenz | Phasenmodell, Anforderungs-IDs, Entscheidungen mit Alternativen liegen vor. |
-| Design | Netzplan, Adressplan, Matrix und Begründungen liegen vor. |
-| Installation | `install.sh` und Basistest liegen vor. Wiederholungsnachweis fehlt. |
-| Nachweise | Testfälle sind benannt, Ergebnisse fehlen. |
+| Stabilität in der Demo | Alle Tests bestanden. Speichergrenzen gesetzt. Bekannt: Suricata ohne Überwachung. |
+| Methodenkompetenz | Phasenmodell, IDs für Anforderungen, Verbindungen und Tests, Entscheidungen mit Alternativen. |
+| Design | Netzplan, Adressplan 0.2, Matrix 0.2 und Entscheidungen 0.2 passen zur Umsetzung. |
+| Installation | `install.sh` mit fester Containerlab-Version, README mit Anleitung und Fehlerquellen. Wiederholungsnachweis auf frischer VM fehlt. |
+| Nachweise | Sieben Testskripte, `make test-all`. Protokolle der Testläufe für die Dokumentation sichern. |
 | Dokumentation | Nicht begonnen. Ein Diagramm der Datenflüsse fehlt. |
 
 ## Offene Punkte
 
-| Nr. | Punkt | Klärung |
+| Nr. | Punkt | Stand |
 |---|---|---|
-| 1 | Internetzugang aus der DMZ. Die strenge Lesart der Aufgabenstellung ist nicht erfüllt (Matrix, V-09). | Phase 3, bei den Firewall-Regeln |
-| 2 | Standardroute und Erreichbarkeit über das Management-Netz | Phase 2 |
-| 3 | Rechte für nftables, tc und WireGuard im Container. Kernelmodul WireGuard. | Phase 2 und 3 |
-| 4 | Ziele des VPN-Clients über die Webanwendung hinaus (K-08) | Phase 3 |
-| 5 | Anzeige innerhalb von 1 s. Grafana mit Loki als SIEM ausreichend. | Phase 4 |
-| 6 | Zugriff auf das Dashboard im Labor (K-12) | Test im Labor mit dem ersten Gesamtstand |
-| 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Phase 6 |
-| 8 | Drei Angriffe und Werkzeuge des Angreifers | Phase 6 |
-| 9 | Diagramm der Datenflüsse für die Dokumentation (DOC-03) | Entwurf nach Phase 3, Reinzeichnung in Phase 7 |
-| 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Vor der Abgabe |
-| 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7 |
+| 1 | Internetzugang aus der DMZ | Erledigt: K-06 bleibt (Matrix 0.2), V-12 sperrt alle übrigen Dienste. |
+| 2 | Standardroute und Erreichbarkeit über das Management-Netz | Erledigt: kein Management-Netz (`network-mode: none`), Test T-01. |
+| 3 | Rechte für nftables, tc und WireGuard im Container | Erledigt: Test R-03. Kernelmodul WireGuard auf der Labor-VM noch prüfen. |
+| 4 | Ziele des VPN-Clients über die Webanwendung hinaus (K-08) | Offen, mit dem VPN. |
+| 5 | Anzeige innerhalb von 1 s, Grafana mit Loki ausreichend | Offen, Phase 4. |
+| 6 | Zugriff auf das Dashboard (K-12) | Offen. Ohne Management-Netz gibt es keinen Weg vom Browser zu `siem`. Möglich sind ein eigener Link `siem` ↔ Host über einen `host:`-Endpunkt oder ein Management-Netz nur für `siem`. Entscheidung beim Aufbau des SIEM. |
+| 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Offen, Phase 6. |
+| 8 | Drei Angriffe und Werkzeuge des Angreifers | Offen, Phase 6. |
+| 9 | Diagramm der Datenflüsse (DOC-03) | Offen, Phase 7. |
+| 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Version 0.82.0 festgeschrieben (E-13). Wiederholungsnachweis offen. |
+| 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7. |
+| 12 | IDS sieht durchgelassene Anfragen doppelt | Beim Bau der Dashboards berücksichtigen (E-08). |
+| 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Phase 4 (E-08, R-05). |
+| 14 | Bau der Images über VPN bricht ab | Hinweis im README, vor dem Labortermin Images bauen (R-06). |

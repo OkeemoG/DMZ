@@ -69,6 +69,8 @@ srv=$(head_ web-secure http://127.0.0.1:8080/health | tr -d '\r' | grep -ic '^se
 result W-04 "Server header without version" 1 "$srv"
 err=$(body web-secure 'http://127.0.0.1:8080/download?file=nope.txt' | grep -ic traceback)
 result W-04 "no stack trace on error" 0 "$err"
+csp=$(head_ web-secure http://127.0.0.1:8080/ | tr -d '\r' | grep -ic "^content-security-policy: default-src 'self'")
+result W-04 "Content-Security-Policy in secure mode" 1 "$csp"
 docker rm -f web-secure >/dev/null 2>&1
 
 if [ "$fail" -eq 0 ]; then

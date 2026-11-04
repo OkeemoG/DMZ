@@ -10,7 +10,7 @@ check() {
     if docker run --rm "${img}:${TAG}" sh -c "command -v ${tool}" >/dev/null 2>&1; then
       echo "OK    ${img}: ${tool}"
     else
-      echo "FEHLT ${img}: ${tool}"
+      echo "MISSING ${img}: ${tool}"
       fail=1
     fi
   done
@@ -25,8 +25,8 @@ check waf     ip nginx
 check ids     ip suricata
 
 if [ "$fail" -eq 0 ]; then
-  echo "ERGEBNIS: bestanden"
+  echo "RESULT: passed"
 else
-  echo "ERGEBNIS: nicht bestanden"
+  echo "RESULT: failed"
   exit 1
 fi
