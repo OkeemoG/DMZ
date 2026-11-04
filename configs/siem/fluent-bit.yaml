@@ -31,6 +31,16 @@ pipeline:
       condition: Key_Value_Equals ident suricata
       set: host ids
 
+    - name: modify
+      match: '*'
+      condition: 'Key_Value_Matches src_addr ^udp://10\.10\.0\.2:'
+      set: host fw-dmz
+
+    - name: modify
+      match: '*'
+      condition: 'Key_Value_Matches src_addr ^udp://10\.10\.0\.9:'
+      set: host fw-edge
+
     - name: parser
       match: '*'
       key_name: message

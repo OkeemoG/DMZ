@@ -77,6 +77,28 @@ echo "$t"
 PROBE
 }
 
+knock() {
+  docker run --rm -i --network "container:${P}-$1" client:0.1 sh -s "$2" "$3" <<'KNOCK'
+t=$(cut -d' ' -f1 /proc/uptime)
+socat -T1 /dev/null "TCP:$1:$2,connect-timeout=1" >/dev/null 2>&1
+echo "$t"
+KNOCK
+}
+
+fw_report() {
+  local since tmp sent ms
+  since=$(date +%s%N)
+  tmp=$(mktemp)
+  poll "{job=\"dmz\", host=\"$1\", ident=\"ulogd\"} |= \"SRC=$3\" |= \"DPT=$5\"" "$since" > "$tmp" &
+  local pid=$!
+  sleep 0.3
+  sent=$(knock "$2" "$4" "$5" | tail -1)
+  wait "$pid"
+  ms=$(elapsed "$sent" "$(tr -d '\r\n' < "$tmp")")
+  rm -f "$tmp"
+  echo "$ms $since"
+}
+
 send() {
   docker run --rm -i --network "container:${P}-waf" client:0.1 sh -s "$1" <<'SEND'
 t=$(cut -d' ' -f1 /proc/uptime)
@@ -163,6 +185,18 @@ result S-04 "SQL injection alert (SID 1000001) reported by ids as parsed JSON" y
 result S-04 "alert names the real attacker 192.0.2.10 (xff)" yes "$(has "$ids" 'xff[^0-9]*192\.0\.2\.10')"
 result S-04 "alert visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
 result S-04 "only alerts are forwarded, no http events" no "$(has "$(lines '{job="dmz", host="ids"} | json | event_type!="alert"' "$since")" '"result":\[\{')"
+
+echo "== S-05 Firewalls report dropped packets to the SIEM (K-10, K-11)"
+for fw in fw-edge fw-dmz; do
+  result S-05 "$fw: ulogd and syslogd running" "yes yes" "$(x "$fw" pgrep ulogd >/dev/null && echo yes || echo no) $(x "$fw" pgrep syslogd >/dev/null && echo yes || echo no)"
+  result S-05 "$fw: drop logging rate-limited to 20/s" yes "$(has "$(x "$fw" nft list ruleset 2>/dev/null)" 'limit rate 20/second burst 40 packets log prefix')"
+done
+read -r ms since <<< "$(fw_report fw-edge attacker 192.0.2.10 203.0.113.2 23)"
+result S-05 "fw-edge reports attacker probing TCP 23 within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-05 "fw-edge report names chain and rule prefix" yes "$(has "$(lines '{job="dmz", host="fw-edge", ident="ulogd"} |= "DPT=23"' "$since")" 'fw-edge input drop')"
+read -r ms since <<< "$(fw_report fw-dmz web 10.10.10.10 192.0.2.10 4445)"
+result S-05 "fw-dmz reports web -> Internet TCP 4445 (V-12) within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-05 "fw-dmz report names chain and rule prefix" yes "$(has "$(lines '{job="dmz", host="fw-dmz", ident="ulogd"} |= "DPT=4445"' "$since")" 'fw-dmz forward drop')"
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-collector" "${P}-siem-loki" "${P}-siem-grafana" 2>/dev/null

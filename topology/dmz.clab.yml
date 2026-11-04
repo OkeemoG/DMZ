@@ -49,6 +49,7 @@ topology:
       image: fw:0.1
       binds:
         - ../configs/fw-edge/nftables.nft:/etc/nftables.nft:ro
+        - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
       sysctls:
         net.ipv4.ip_forward: 1
       exec:
@@ -60,6 +61,8 @@ topology:
         - ip route add 10.10.10.0/24 via 10.10.0.2 dev eth2
         - ip route add 10.10.20.0/24 via 10.10.0.6 dev eth3
         - ip route add 10.10.30.0/24 via 10.10.0.10 dev eth4
+        - syslogd -R 10.10.30.10:5140
+        - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
 
     #DMZ 
@@ -68,6 +71,7 @@ topology:
       image: fw:0.1
       binds:
         - ../configs/fw-dmz/nftables.nft:/etc/nftables.nft:ro
+        - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
       sysctls:
         net.ipv4.ip_forward: 1
       exec:
@@ -79,6 +83,8 @@ topology:
         # eth6: Spiegelausgang zum IDS, ohne Adresse (V-11)
         - sysctl -w net.ipv6.conf.eth6.disable_ipv6=1
         - ip route replace default via 10.10.0.1 dev eth1
+        - syslogd -R 10.10.30.10:5140
+        - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
         # Spiegelung: eingehende Pakete von eth1 bis eth4 als Kopie nach eth6, vor der Filterung
         - tc qdisc add dev eth1 clsact
