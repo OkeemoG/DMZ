@@ -226,7 +226,7 @@ topology:
       kind: linux
       image: grafana/grafana:13.3.0
       network-mode: container:siem
-      memory: 384MB
+      memory: 512MB
       env:
         GF_SECURITY_ADMIN_USER: admin
         GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:=dmz-soc}
