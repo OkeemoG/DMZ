@@ -142,6 +142,7 @@ topology:
         - ip route replace default via 10.10.10.13 dev eth1
         # eth2: Mitschnitt vom Spiegelport, ohne Adresse (V-11)
         - sysctl -w net.ipv6.conf.eth2.disable_ipv6=1
+        - syslogd -R 10.10.30.10:5140
         - suricata --include /etc/suricata/lab.yaml --af-packet -D
 
     #Client-Netz

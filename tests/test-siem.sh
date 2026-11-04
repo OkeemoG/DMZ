@@ -35,10 +35,12 @@ wait_for() {
 }
 
 poll() {
-  docker exec -i "${P}-siem" sh -s "$1" <<'POLL'
+  docker exec -i "${P}-siem" sh -s "$1" "${2:-}" <<'POLL'
+start=""
+[ -n "$2" ] && start="--data-urlencode start=$2"
 i=0
 while [ "$i" -lt 150 ]; do
-  if curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=1 | grep -q '"result":\[{'; then
+  if curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" $start --data-urlencode limit=1 | grep -q '"result":\[{'; then
     cut -d' ' -f1 /proc/uptime
     exit 0
   fi
@@ -50,7 +52,9 @@ POLL
 }
 
 lines() {
-  x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=50 2>/dev/null
+  local start=()
+  [ -n "${2:-}" ] && start=(--data-urlencode "start=$2")
+  x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" "${start[@]}" --data-urlencode limit=50 2>/dev/null
 }
 
 elapsed() {
@@ -63,6 +67,14 @@ t=$(cut -d' ' -f1 /proc/uptime)
 curl -sk -o /dev/null --data-urlencode "username=admin' OR '1'='1" --data-urlencode "password=x" "https://203.0.113.2/login?id=$1"
 echo "$t"
 ATTACK
+}
+
+probe_ids() {
+  docker exec -i "${P}-attacker" sh -s "$1" <<'PROBE'
+t=$(cut -d' ' -f1 /proc/uptime)
+curl -sk -o /dev/null "https://203.0.113.2/search?q=1%27%20UNION%20SELECT%20name%20FROM%20users--&m=$1"
+echo "$t"
+PROBE
 }
 
 send() {
@@ -134,6 +146,23 @@ result S-03 "report names the real attacker 192.0.2.10" yes "$(has "$waf" 'clien
 result S-03 "attack visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
 noise=$(lines '{job="dmz", host="waf", ident="modsecurity"} != "ModSecurity: "')
 result S-03 "nginx messages without ModSecurity are filtered out" no "$(has "$noise" '"result":\[\{')"
+
+echo "== S-04 IDS reports alerts to the SIEM (K-09)"
+since=$(date +%s%N)
+tmp=$(mktemp)
+q='{job="dmz", host="ids", ident="suricata"} | json | alert_signature_id="1000001"'
+poll "$q" "$since" > "$tmp" &
+pid=$!
+sleep 0.3
+sent=$(probe_ids "${RUN}-ids" | tail -1)
+wait "$pid"
+ms=$(elapsed "$sent" "$(tr -d '\r\n' < "$tmp")")
+rm -f "$tmp"
+ids=$(lines '{job="dmz", host="ids", ident="suricata"}' "$since")
+result S-04 "SQL injection alert (SID 1000001) reported by ids as parsed JSON" yes "$([ "$ms" != "99999" ] && echo yes || echo no)"
+result S-04 "alert names the real attacker 192.0.2.10 (xff)" yes "$(has "$ids" 'xff[^0-9]*192\.0\.2\.10')"
+result S-04 "alert visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-04 "only alerts are forwarded, no http events" no "$(has "$(lines '{job="dmz", host="ids"} | json | event_type!="alert"' "$since")" '"result":\[\{')"
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-collector" "${P}-siem-loki" "${P}-siem-grafana" 2>/dev/null
