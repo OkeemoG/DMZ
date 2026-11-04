@@ -1,5 +1,4 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem
- test-all
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-all
 
 TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem
 
