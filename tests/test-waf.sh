@@ -96,6 +96,16 @@ echo "== WA-06 Block page does not reveal details"
 resp=$(x attacker curl -sk -i -G --data "id=${RUN}-atk-h" --data-urlencode "q=<script>alert(1)</script>" "$EXT/search" 2>/dev/null | tr -d '\r')
 result WA-06 "no WAF product or version in response" no "$(has "$resp" '[Mm]od[Ss]ecurity|OWASP|nginx/[0-9]')"
 
+echo "== WA-07 Virtual patch VP-01: SQL comment directly after a quote"
+result WA-07 "admin'# blocked" 403 "$(code attacker -G --data "id=${RUN}-vp1" --data-urlencode "q=admin'#" "$EXT/search")"
+result WA-07 "admin'-- blocked" 403 "$(code attacker -G --data "id=${RUN}-vp2" --data-urlencode "q=admin'--" "$EXT/search")"
+result WA-07 "admin'/* blocked" 403 "$(code attacker -G --data "id=${RUN}-vp3" --data-urlencode "q=admin'/*" "$EXT/search")"
+result WA-07 "audit entry names rule 1001" yes "$(has "$(waflog "${RUN}-vp1")" '"ruleId": ?"1001"')"
+c=$(code attacker -G --data "id=${RUN}-vp4" --data-urlencode "q=O'Brien #1" "$EXT/search")
+result WA-07 "legitimate text O'Brien #1 not blocked" yes "$([ "$c" != "403" ] && echo yes || echo no)"
+c=$(code attacker -G --data "id=${RUN}-vp5" --data-urlencode "q=user's--guide" "$EXT/search")
+result WA-07 "legitimate text user's--guide not blocked" yes "$([ "$c" != "403" ] && echo yes || echo no)"
+
 if [ "$fail" -eq 0 ]; then
   echo "RESULT: passed"
 else

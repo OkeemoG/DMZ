@@ -32,6 +32,8 @@ sqli "mixed case"               "' oR '1'='1"
 sqli "inline comments"          "'/**/OR/**/'1'='1"
 sqli "comment terminator"       "' OR 1=1-- -"
 sqli "hash terminator"          "admin'#"
+sqli "dash terminator"          "admin'--"
+sqli "block comment"            "admin'/*"
 sqli "UNION plain"              "' UNION SELECT username,password FROM users-- -"
 sqli "UNION mixed case"         "' UnIoN sElEcT username,password fRoM users-- -"
 sqli "UNION with comments"      "'/**/UNION/**/SELECT/**/username,password/**/FROM/**/users-- -"
@@ -68,7 +70,8 @@ if [ "${#passed[@]}" -gt 0 ]; then
   echo "        slips past the WAF still leaves a trace."
 else
   echo
-  echo "   CRS 4.30 with libinjection blocked every standard obfuscation at paranoia level 1."
+  echo "   The WAF blocked every evasion attempt: OWASP CRS 4.30 at paranoia level 1"
+  echo "   plus the DMZ virtual patch VP-01 (configs/waf/REQUEST-899-DMZ-VIRTUAL-PATCHES.conf)."
 fi
 
 stage "In the SIEM, see which rule caught each blocked variant:"
