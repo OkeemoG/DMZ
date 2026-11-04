@@ -7,6 +7,7 @@ TARGET="203.0.113.2"
 RUN="a1-$(date +%H%M%S)"
 
 head1 "A-1  External multi-stage attack  (attacker 192.0.2.10 -> ${TARGET})"
+wait_waf
 
 stage "Stage 1  Reconnaissance: TCP port scan"
 for p in 21 22 23 25 53 3306 8080 80 443; do
