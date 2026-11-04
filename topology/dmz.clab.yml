@@ -237,8 +237,11 @@ topology:
         GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
         GF_PLUGINS_PREINSTALL_DISABLED: "true"
         GF_NEWS_NEWS_FEED_ENABLED: "false"
+        GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/soc.json
       binds:
         - ../configs/siem/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/dmz.yaml:ro
+        - ../configs/siem/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dmz.yaml:ro
+        - ../configs/siem/dashboards:/var/lib/grafana/dashboards:ro
       stages:
         create:
           wait-for:

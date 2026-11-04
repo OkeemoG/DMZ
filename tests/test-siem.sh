@@ -166,6 +166,8 @@ result S-03 "blocked SQL injection reported by waf" yes "$([ "$ms" != "99999" ] 
 result S-03 "report names the attack rule (942xxx, SQL injection)" yes "$(has "$waf" '942[0-9]{3}')"
 result S-03 "report names the real attacker 192.0.2.10" yes "$(has "$waf" 'client: 192\.0\.2\.10')"
 result S-03 "attack visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-03 "collector extracts attack type and client" yes "$(has "$(lines "{job=\"dmz\", host=\"waf\", ident=\"modsecurity\"} |= \"$tok\" | json | attack=\"sqli\" | client=\"192.0.2.10\"")" '"result":\[\{')"
+result S-03 "collector extracts score and path from the block" yes "$(has "$(lines "{job=\"dmz\", host=\"waf\", ident=\"modsecurity\"} |= \"$tok\" |= \"Access denied\" | json | score!=\"\" | uri=\"/login\"")" '"result":\[\{')"
 noise=$(lines '{job="dmz", host="waf", ident="modsecurity"} != "ModSecurity: "')
 result S-03 "nginx messages without ModSecurity are filtered out" no "$(has "$noise" '"result":\[\{')"
 
@@ -184,6 +186,7 @@ ids=$(lines '{job="dmz", host="ids", ident="suricata"}' "$since")
 result S-04 "SQL injection alert (SID 1000001) reported by ids as parsed JSON" yes "$([ "$ms" != "99999" ] && echo yes || echo no)"
 result S-04 "alert names the real attacker 192.0.2.10 (xff)" yes "$(has "$ids" 'xff[^0-9]*192\.0\.2\.10')"
 result S-04 "alert visible in SIEM within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-04 "collector sets client from xff" yes "$(has "$(lines '{job="dmz", host="ids", ident="suricata"} | json | alert_signature_id="1000001" | client="192.0.2.10"' "$since")" '"result":\[\{')"
 result S-04 "only alerts are forwarded, no http events" no "$(has "$(lines '{job="dmz", host="ids"} | json | event_type!="alert"' "$since")" '"result":\[\{')"
 
 echo "== S-05 Firewalls report dropped packets to the SIEM (K-10, K-11)"
@@ -194,9 +197,18 @@ done
 read -r ms since <<< "$(fw_report fw-edge attacker 192.0.2.10 203.0.113.2 23)"
 result S-05 "fw-edge reports attacker probing TCP 23 within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
 result S-05 "fw-edge report names chain and rule prefix" yes "$(has "$(lines '{job="dmz", host="fw-edge", ident="ulogd"} |= "DPT=23"' "$since")" 'fw-edge input drop')"
+result S-05 "collector extracts client, port and chain" yes "$(has "$(lines '{job="dmz", host="fw-edge", ident="ulogd"} | json | client="192.0.2.10" | dpt="23" | fw_rule="fw-edge input drop"' "$since")" '"result":\[\{')"
 read -r ms since <<< "$(fw_report fw-dmz web 10.10.10.10 192.0.2.10 4445)"
 result S-05 "fw-dmz reports web -> Internet TCP 4445 (V-12) within ${LIMIT_MS} ms (${ms} ms)" yes "$([ "$ms" -lt "$LIMIT_MS" ] && echo yes || echo no)"
 result S-05 "fw-dmz report names chain and rule prefix" yes "$(has "$(lines '{job="dmz", host="fw-dmz", ident="ulogd"} |= "DPT=4445"' "$since")" 'fw-dmz forward drop')"
+
+echo "== S-06 SOC dashboard"
+dash=$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/uid/dmz-soc 2>/dev/null)
+result S-06 "dashboard provisioned from configs/siem/dashboards" yes "$(has "$dash" '"uid": *"dmz-soc"')"
+result S-06 "dashboard refreshes every second" yes "$(has "$dash" '"refresh": *"1s"')"
+result S-06 "dashboard is the Grafana home page" yes "$(has "$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/home 2>/dev/null)" 'dmz-soc')"
+stream='{job="dmz", ident=~"modsecurity|suricata|ulogd"} != "ModSecurity: Warning" | json | client!=""'
+result S-06 "alarm stream query returns events from waf, ids and firewalls" "fw-dmz fw-edge ids waf" "$(lines "sum by (host) (count_over_time(${stream} [10m]))" | grep -oE '"host":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-collector" "${P}-siem-loki" "${P}-siem-grafana" 2>/dev/null
