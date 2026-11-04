@@ -16,9 +16,9 @@ check() {
   done
 }
 
-check fw      ip nft ulogd tcpdump wg
+check fw      ip nft ulogd tcpdump swanctl
 check router  ip tcpdump
-check client  ip curl tcpdump wg socat openssl
+check client  ip curl tcpdump swanctl socat openssl
 check proxy   ip nginx
 check web     ip python3 gunicorn
 check waf     ip nginx

@@ -2,3 +2,4 @@ clab-*/
 *.bak
 *.pcap
 *.key
+configs/vpn/pki/

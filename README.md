@@ -25,8 +25,8 @@ Die gesamte Umgebung läuft als 17 Docker-Container in einer VM und wird mit Con
 |---|---|---|
 | `inet` | Router, bildet das Internet nach | umgesetzt |
 | `attacker` | Angreifer im Internet | umgesetzt |
-| `ro-client1`, `ro-client2` | Remote Office | Netz umgesetzt, VPN offen |
-| `fw-edge` | Edge-Firewall zwischen Internet und Firmennetz, NAT | umgesetzt |
+| `ro-client1`, `ro-client2` | Remote Office, VPN-Client (IKEv2/IPsec mit strongSwan nach BSI TR-02102-3) | umgesetzt |
+| `fw-edge` | Edge-Firewall zwischen Internet und Firmennetz, NAT, VPN-Endpunkt | umgesetzt |
 | `fw-dmz` | Firewall der DMZ, Spiegelport zum IDS | umgesetzt |
 | `proxy` | Reverse-Proxy, beendet TLS 1.3 nach BSI TR-02102-2, Ratenbegrenzung, HSTS | umgesetzt |
 | `waf` | ModSecurity v3 mit OWASP CRS 4 | umgesetzt |
@@ -74,7 +74,8 @@ make test-basic
 | Befehl | Wirkung |
 |---|---|
 | `make images` | Baut alle Images |
-| `make deploy` | Baut die Images und startet die Topologie neu |
+| `make pki` | Erzeugt die Zertifikate und Schlüssel für das VPN in `configs/vpn/pki/`, falls noch nicht vorhanden |
+| `make deploy` | Baut die Images, erzeugt bei Bedarf die PKI und startet die Topologie neu |
 | `make destroy` | Stoppt die Topologie und räumt auf |
 | `make test-all` | Führt alle Tests aus und meldet am Ende `ALL TESTS PASSED` oder die fehlgeschlagenen Tests |
 
@@ -119,6 +120,7 @@ docker exec clab-dmz-client1 curl -sk -G --data-urlencode "file=../../etc/passwd
 | `make test-ids` | Suricata, Spiegelport, Erkennung mit echter Client-Adresse |
 | `make test-siem` | SIEM-Dienste, Zugang, Latenz bis zum SIEM, Meldungen von WAF, IDS und Firewalls mit Feldern, Dashboard |
 | `make test-web` | Webanwendung in beiden Betriebsarten, eigene Container außerhalb der Topologie |
+| `make test-vpn` | Tunnel und Verfahren nach BSI TR-02102-3, Zugriff über den Tunnel, Sperren, Abweisung unzulässiger Verfahren, PKI |
 
 Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie voraus (`make deploy`).
 
@@ -128,11 +130,12 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 |---|---|
 | `topology/dmz.clab.yml` | Knoten, Images, Adressen, Routen, Leitungen, eingebundene Konfiguration |
 | `images/` | Ein Dockerfile je Image, dazu der Code der Webanwendung |
-| `configs/` | Konfiguration je Knoten: Firewall-Regeln und ulogd2 (`fw`), Proxy, WAF, IDS, SIEM mit Dashboard (`siem`) |
-| `scripts/` | `install.sh`, `build-images.sh` |
+| `configs/` | Konfiguration je Knoten: Firewall-Regeln, Proxy, WAF, IDS, VPN |
+| `configs/vpn/pki/` | Labor-PKI des VPN, erzeugt von `make pki`, nicht im Repo |
+| `scripts/` | `install.sh`, `build-images.sh`, `gen-vpn-pki.sh` |
 | `tests/` | Ein Testskript je Thema |
 | `docs/` | Aufgabenstellung, Planung, Netzpläne |
-| `quellen/` | BSI TR-02102-1 und TR-02102-2 |
+| `docs/quellen/` | BSI TR-02102-1, TR-02102-2 und TR-02102-3 |
 
 ## Fehlerquellen
 
@@ -143,6 +146,7 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 | Tests schlagen nach `git pull` breit fehl, z. B. Suricata fehlt | Es läuft noch die alte Topologie | `make deploy` |
 | `test-waf` oder `test-proxy` direkt nach dem Start fehlgeschlagen | WAF noch im Zustand `health: starting` | Die Tests warten bis 60 s. Danach `docker inspect clab-dmz-waf` prüfen |
 | `permission denied` bei `docker` oder `containerlab` | Gruppen nach der Installation noch nicht aktiv | Neu anmelden |
+| `containerlab deploy` meldet eine fehlende Datei unter `configs/vpn/pki` | PKI noch nicht erzeugt | `make pki` oder `make deploy` |
 | `make` meldet `missing separator` | Befehle im Makefile mit Leerzeichen statt Tab eingerückt | Tab verwenden |
 | Grafana im Browser nicht erreichbar | Netz der VM erlaubt keinen Zugriff vom Host | In der VM `curl -s http://localhost:3000/api/health` prüfen, dann Portweiterleitung oder SSH-Tunnel (siehe SIEM und Dashboard) |
 | `test-siem` meldet „Loki ready“ oder „Grafana healthy“ als fehlgeschlagen | Loki braucht nach dem Start 15 s, Grafana beim ersten Start länger | Der Test wartet bis 60 bzw. 120 s. Danach `docker logs clab-dmz-siem-loki` bzw. `clab-dmz-siem-grafana` prüfen |

@@ -81,8 +81,9 @@ if x fw-edge sh -c 'nft add table inet r03 && nft delete table inet r03' >/dev/n
 result R-03 "nftables on fw-edge" ok "$r"
 if x fw-dmz sh -c 'tc qdisc add dev eth6 clsact && tc qdisc del dev eth6 clsact' >/dev/null 2>&1; then r=ok; else r=fail; fi
 result R-03 "tc on fw-dmz eth6" ok "$r"
-if x fw-edge sh -c 'ip link add wg-r03 type wireguard && ip link del wg-r03' >/dev/null 2>&1; then r=ok; else r=fail; fi
-result R-03 "WireGuard interface on fw-edge" ok "$r"
+# IPsec: Kernel-ESP mit AES-GCM im Container (Testzustand auf fw-backend, dort laeuft kein charon)
+if x fw-backend sh -c "ip xfrm state add src 192.0.2.250 dst 192.0.2.251 proto esp spi 0x1000 mode tunnel aead 'rfc4106(gcm(aes))' 0x000000000000000000000000000000000000000000000000000000000000000000000000 128 && ip xfrm state delete src 192.0.2.250 dst 192.0.2.251 proto esp spi 0x1000" >/dev/null 2>&1; then r=ok; else r=fail; fi
+result R-03 "IPsec (XFRM, ESP with AES-GCM) inside container" ok "$r"
 
 if [ "$fail" -eq 0 ]; then
   echo "RESULT: passed"

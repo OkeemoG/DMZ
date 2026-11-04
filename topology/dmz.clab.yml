@@ -29,27 +29,49 @@ topology:
         - ip addr add 192.0.2.10/24 dev eth1
         - ip route replace default via 192.0.2.1 dev eth1
 
+    # VPN (IKEv2/IPsec, strongSwan): Zertifikate und Schluessel aus configs/vpn/pki (make pki)
     ro-client1:
       kind: linux
       image: client:0.1
+      binds:
+        - ../configs/vpn/ro-client.conf:/etc/swanctl/swanctl.conf:ro
+        - ../configs/vpn/strongswan-lab.conf:/etc/strongswan.d/lab.conf:ro
+        - ../configs/vpn/vpn-start.sh:/etc/swanctl/vpn-start.sh:ro
+        - ../configs/vpn/pki/ca.crt:/etc/swanctl/x509ca/ca.crt:ro
+        - ../configs/vpn/pki/ro-client1.crt:/etc/swanctl/x509/client.crt:ro
+        - ../configs/vpn/pki/ro-client1.key:/etc/swanctl/private/client.key:ro
       exec:
         - ip addr add 198.51.100.2/30 dev eth1
         - ip route replace default via 198.51.100.1 dev eth1
+        - sh /etc/swanctl/vpn-start.sh
 
     ro-client2:
       kind: linux
       image: client:0.1
+      binds:
+        - ../configs/vpn/ro-client.conf:/etc/swanctl/swanctl.conf:ro
+        - ../configs/vpn/strongswan-lab.conf:/etc/strongswan.d/lab.conf:ro
+        - ../configs/vpn/vpn-start.sh:/etc/swanctl/vpn-start.sh:ro
+        - ../configs/vpn/pki/ca.crt:/etc/swanctl/x509ca/ca.crt:ro
+        - ../configs/vpn/pki/ro-client2.crt:/etc/swanctl/x509/client.crt:ro
+        - ../configs/vpn/pki/ro-client2.key:/etc/swanctl/private/client.key:ro
       exec:
         - ip addr add 198.51.100.6/30 dev eth1
         - ip route replace default via 198.51.100.5 dev eth1
+        - sh /etc/swanctl/vpn-start.sh
 
-    #Edge-Firewall 
+    #Edge-Firewall
     fw-edge:
       kind: linux
       image: fw:0.1
       binds:
         - ../configs/fw-edge/nftables.nft:/etc/nftables.nft:ro
-        - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
+        - ../configs/vpn/fw-edge.conf:/etc/swanctl/swanctl.conf:ro
+        - ../configs/vpn/strongswan-lab.conf:/etc/strongswan.d/lab.conf:ro
+        - ../configs/vpn/vpn-start.sh:/etc/swanctl/vpn-start.sh:ro
+        - ../configs/vpn/pki/ca.crt:/etc/swanctl/x509ca/ca.crt:ro
+        - ../configs/vpn/pki/fw-edge.crt:/etc/swanctl/x509/fw-edge.crt:ro
+        - ../configs/vpn/pki/fw-edge.key:/etc/swanctl/private/fw-edge.key:ro
       sysctls:
         net.ipv4.ip_forward: 1
       exec:
@@ -64,6 +86,7 @@ topology:
         - syslogd -R 10.10.30.10:5140
         - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
+        - sh /etc/swanctl/vpn-start.sh
 
     #DMZ 
     fw-dmz:
