@@ -1,6 +1,7 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-all
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem
+ test-all
 
-TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn
+TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem
 
 images:
 	bash scripts/build-images.sh
@@ -42,6 +43,9 @@ test-web:
 
 test-waf:
 	bash tests/test-waf.sh
+
+test-siem:
+	bash tests/test-siem.sh
 
 test-all:
 	@[ -n "$(TESTS)" ] || { echo "TESTS is empty"; exit 1; }

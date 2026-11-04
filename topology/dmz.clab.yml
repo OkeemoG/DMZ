@@ -83,6 +83,8 @@ topology:
         - ip route add 10.10.10.0/24 via 10.10.0.2 dev eth2
         - ip route add 10.10.20.0/24 via 10.10.0.6 dev eth3
         - ip route add 10.10.30.0/24 via 10.10.0.10 dev eth4
+        - syslogd -R 10.10.30.10:5140
+        - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
         - sh /etc/swanctl/vpn-start.sh
 
@@ -92,6 +94,7 @@ topology:
       image: fw:0.1
       binds:
         - ../configs/fw-dmz/nftables.nft:/etc/nftables.nft:ro
+        - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
       sysctls:
         net.ipv4.ip_forward: 1
       exec:
@@ -103,6 +106,8 @@ topology:
         # eth6: Spiegelausgang zum IDS, ohne Adresse (V-11)
         - sysctl -w net.ipv6.conf.eth6.disable_ipv6=1
         - ip route replace default via 10.10.0.1 dev eth1
+        - syslogd -R 10.10.30.10:5140
+        - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
         # Spiegelung: eingehende Pakete von eth1 bis eth4 als Kopie nach eth6, vor der Filterung
         - tc qdisc add dev eth1 clsact
@@ -129,6 +134,7 @@ topology:
       memory: 256MB
       binds:
         - ../configs/waf/realip.conf:/etc/nginx/conf.d/00-realip.conf:ro
+        - ../configs/waf/siem.conf:/etc/nginx/conf.d/10-siem.conf:ro
         - ../configs/waf/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro
       env:
         BACKEND: http://10.10.10.10:8080
@@ -156,7 +162,7 @@ topology:
     ids:
       kind: linux
       image: ids:0.1
-      memory: 512MB
+      memory: 256MB
       binds:
         - ../configs/ids/lab.yaml:/etc/suricata/lab.yaml:ro
         - ../configs/ids/local.rules:/etc/suricata/local.rules:ro
@@ -165,6 +171,7 @@ topology:
         - ip route replace default via 10.10.10.13 dev eth1
         # eth2: Mitschnitt vom Spiegelport, ohne Adresse (V-11)
         - sysctl -w net.ipv6.conf.eth2.disable_ipv6=1
+        - syslogd -R 10.10.30.10:5140
         - suricata --include /etc/suricata/lab.yaml --af-packet -D
 
     #Client-Netz
@@ -202,9 +209,67 @@ topology:
     siem:
       kind: linux
       image: client:0.1
+      network-mode: bridge
+      ports:
+        - 3000:3000
+      binds:
+        - ../configs/siem/mgmt-routing.sh:/etc/siem/mgmt-routing.sh:ro
       exec:
         - ip addr add 10.10.30.10/24 dev eth1
-        - ip route replace default via 10.10.30.1 dev eth1
+        - sh /etc/siem/mgmt-routing.sh
+
+    siem-collector:
+      kind: linux
+      image: fluent/fluent-bit:5.1.5
+      network-mode: container:siem
+      memory: 64MB
+      cmd: -c /fluent-bit/etc/dmz.yaml
+      binds:
+        - ../configs/siem/fluent-bit.yaml:/fluent-bit/etc/dmz.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
+
+    siem-loki:
+      kind: linux
+      image: grafana/loki:3.7.9
+      network-mode: container:siem
+      memory: 256MB
+      binds:
+        - ../configs/siem/loki.yaml:/etc/loki/local-config.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
+
+    siem-grafana:
+      kind: linux
+      image: grafana/grafana:13.3.0
+      network-mode: container:siem
+      memory: 512MB
+      env:
+        GF_SECURITY_ADMIN_USER: admin
+        GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:=dmz-soc}
+        GF_USERS_ALLOW_SIGN_UP: "false"
+        GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+        GF_ANALYTICS_REPORTING_ENABLED: "false"
+        GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+        GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+        GF_PLUGINS_PREINSTALL_DISABLED: "true"
+        GF_NEWS_NEWS_FEED_ENABLED: "false"
+        GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/soc.json
+      binds:
+        - ../configs/siem/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/dmz.yaml:ro
+        - ../configs/siem/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dmz.yaml:ro
+        - ../configs/siem/dashboards:/var/lib/grafana/dashboards:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
 
   links:
     # Internet und Remote Office

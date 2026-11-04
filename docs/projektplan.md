@@ -1,6 +1,6 @@
 # Projektplan – DMZ-Laborumgebung
 
-Stand: 2026-11-02, Version 0.2.
+Stand: 2026-11-04, Version 0.3.
 
 ## Ergebnisse der Phase 1
 
@@ -8,9 +8,9 @@ Stand: 2026-11-02, Version 0.2.
 |---|---|---|
 | Anforderungsliste | Projektwissen, nicht im Repo | 0.4, A-01 bis A-05 entschieden |
 | Netzplan mit Zonenmodell | `docs/DMZ_Netzplan_0.2.drawio` | 0.2 |
-| Adressplan | `docs/adressplan.md` | 0.2 |
-| Kommunikationsmatrix | `docs/kommunikationsmatrix.md` | 0.2 |
-| Technologieentscheidungen | `docs/technologieentscheidungen.md` | 0.2 |
+| Adressplan | `docs/adressplan.md` | 0.3 |
+| Kommunikationsmatrix | `docs/kommunikationsmatrix.md` | 0.3 |
+| Technologieentscheidungen | `docs/technologieentscheidungen.md` | 0.3 |
 | Ressourcenbudget | diese Datei | 0.2 |
 
 ## Festgelegter Stack
@@ -28,21 +28,21 @@ Stand: 2026-11-02, Version 0.2.
 
 ## Ressourcenbudget
 
-Alle Werte sind Schätzungen. Die erste Messung folgt am Ende von Phase 2.
+Schätzungen aus Phase 1, Grenzen und Messungen Stand 2026-11-04.
 
 ### RAM
 
-| Gruppe | Knoten | Schätzung | Grenze je Knoten | Summe der Grenzen |
-|---|---|---|---|---|
-| Netzknoten (`fw`, `router`, `client`) | 9 | je 5–25 MB | 64 MB | 576 MB |
-| `proxy` | 1 | 10–30 MB | 64 MB | 64 MB |
-| `waf` | 1 | 60–150 MB | 256 MB | 256 MB |
-| `web` | 1 | 30–80 MB | 128 MB | 128 MB |
-| `ids` | 1 | 150–350 MB | 512 MB | 512 MB |
-| `siem` | 1 | 250–500 MB | 768 MB | 768 MB |
-| Summe | 14 | 555–1255 MB | | 2304 MB |
+| Gruppe | Knoten | Schätzung | Gemessen | Grenze je Knoten | Summe der Grenzen |
+|---|---|---|---|---|---|
+| Netzknoten (`fw`, `router`, `client`) | 9 | je 5–25 MB | je 0,5–1,2 MB | 64 MB | 576 MB |
+| `proxy` | 1 | 10–30 MB | 3 MB | 64 MB | 64 MB |
+| `waf` | 1 | 60–150 MB | 44 MB | 256 MB | 256 MB |
+| `web` | 1 | 30–80 MB | 28 MB | 128 MB | 128 MB |
+| `ids` | 1 | 150–350 MB | 34 MB | 256 MB | 256 MB |
+| `siem` mit drei Diensten | 4 | 250–500 MB | 410–450 MB | 64/64/256/512 MB | 896 MB |
+| Summe | 17 | 555–1255 MB | ca. 520 MB | | 2176 MB |
 
-Verfügbar sind 3423 MB. Die Reserve für Debian, Docker und den Bau der Images beträgt 1119 MB. Die Grenzen werden in der Topologie je Knoten gesetzt. Die Option dafür ist ungeprüft.
+Verfügbar sind 3423 MB. Die Reserve für Debian, Docker und den Bau der Images beträgt 1247 MB. Gemessen am 2026-11-04: 2598 MB verfügbar, kein Swap. Die Grenzen werden in der Topologie je Knoten gesetzt und wirken (`docker stats`).
 
 ### Disk
 
@@ -67,8 +67,8 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 | Phase | Stand |
 |---|---|
 | 2 Grundaufbau | Erledigt. 14 Knoten ohne Management-Netz, Adressen und Routen nach Adressplan (T-01 bis T-03), Rechte im Container (R-03). |
-| 3 Sicherheitssysteme | Firewalls nach Matrix 0.2, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4). |
-| 4 Logging und SIEM | Offen. |
+| 3 Sicherheitssysteme | Firewalls nach Matrix 0.3, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4), in Arbeit. |
+| 4 Logging und SIEM | Erledigt. Fluent Bit, Loki und Grafana in drei Containern (E-09), alle vier Sensoren melden in unter 1 s (E-10, E-11), Normalisierung (E-14), Zugang über Out-of-Band-Netz (E-15), Dashboard „SOC – DMZ“ (E-16). Test `test-siem`. |
 | 5 bis 8 | Offen. Grundlagen für die Angriffe liegen vor: verwundbare Webanwendung, WAF und IDS mit Erkennung. |
 
 Alle Tests laufen mit `make test-all` (Ablauf siehe `README.md`).
@@ -97,10 +97,10 @@ Ergebnis: Jede Zeile der Matrix ist getestet, erlaubt wie verboten.
 
 ### Phase 4 – Logging und SIEM
 
-1. Vorabtest der Anzeige innerhalb von 1 s (R-01).
-2. Image `lab-siem`.
-3. Meldungen der vier Systeme anbinden.
-4. Dashboards. Zugriff im Labor prüfen.
+1. SIEM-Container und Zugang für den Operator.
+2. Vorabtest der Anzeige innerhalb von 1 s (R-01).
+3. Meldungen der vier Systeme anbinden: WAF, IDS, Firewalls.
+4. Normalisierung im Collector und Dashboard. Zugriff im Labor prüfen.
 
 ### Phase 5 bis 8
 
@@ -124,20 +124,20 @@ DMZ/
 └── docs/              # Aufgabenstellung, Planung, Netzpläne
 ```
 
-Geplant: `images/siem`, `configs/siem`, `attacks/`.
+Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `configs/fw` (ulogd2) dazu. Geplant: `attacks/`.
 
 ## Abgleich mit den Bewertungskriterien
 
-| Kriterium | Stand am 2026-11-02 |
+| Kriterium | Stand am 2026-11-04 |
 |---|---|
-| Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver umgesetzt und getestet. Offen: VPN, SIEM. |
+| Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver sowie SIEM im Backend umgesetzt und getestet. Offen: VPN. |
 | Drei Angriffe, hoher Schwierigkeitsgrad | Nicht entworfen. Phase 6. |
-| Anzeige innerhalb von 1 s | Risiko R-01. Phase 4. |
+| Anzeige innerhalb von 1 s | Erfüllt: Transport bis Loki 50 bis 650 ms, Dashboard mit 1 s Aktualisierung, Live-Ansicht ohne Abfrage-Intervall (E-16). |
 | Stabilität in der Demo | Alle Tests bestanden. Speichergrenzen gesetzt. Bekannt: Suricata ohne Überwachung. |
 | Methodenkompetenz | Phasenmodell, IDs für Anforderungen, Verbindungen und Tests, Entscheidungen mit Alternativen. |
-| Design | Netzplan, Adressplan 0.2, Matrix 0.2 und Entscheidungen 0.2 passen zur Umsetzung. |
+| Design | Netzplan, Adressplan 0.3, Matrix 0.3 und Entscheidungen 0.3 passen zur Umsetzung. |
 | Installation | `install.sh` mit fester Containerlab-Version, README mit Anleitung und Fehlerquellen. Wiederholungsnachweis auf frischer VM fehlt. |
-| Nachweise | Sieben Testskripte, `make test-all`. Protokolle der Testläufe für die Dokumentation sichern. |
+| Nachweise | Acht Testskripte, `make test-all`, Latenzmessung in `test-siem`. Protokolle der Testläufe für die Dokumentation sichern. |
 | Dokumentation | Nicht begonnen. Ein Diagramm der Datenflüsse fehlt. |
 
 ## Offene Punkte
@@ -148,13 +148,13 @@ Geplant: `images/siem`, `configs/siem`, `attacks/`.
 | 2 | Standardroute und Erreichbarkeit über das Management-Netz | Erledigt: kein Management-Netz (`network-mode: none`), Test T-01. |
 | 3 | Rechte für nftables, tc und WireGuard im Container | Erledigt: Test R-03. Kernelmodul WireGuard auf der Labor-VM noch prüfen. |
 | 4 | Ziele des VPN-Clients über die Webanwendung hinaus (K-08) | Offen, mit dem VPN. |
-| 5 | Anzeige innerhalb von 1 s, Grafana mit Loki ausreichend | Offen, Phase 4. |
-| 6 | Zugriff auf das Dashboard (K-12) | Offen. Ohne Management-Netz gibt es keinen Weg vom Browser zu `siem`. Möglich sind ein eigener Link `siem` ↔ Host über einen `host:`-Endpunkt oder ein Management-Netz nur für `siem`. Entscheidung beim Aufbau des SIEM. |
+| 5 | Anzeige innerhalb von 1 s, Grafana mit Loki ausreichend | Erledigt (R-01, E-16). |
+| 6 | Zugriff auf das Dashboard (K-12) | Erledigt: Management-Netz nur für `siem`, Port 3000 auf der VM (E-15). Zugriff im Labor der DHBW noch prüfen. |
 | 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Offen, Phase 6. |
 | 8 | Drei Angriffe und Werkzeuge des Angreifers | Offen, Phase 6. |
 | 9 | Diagramm der Datenflüsse (DOC-03) | Offen, Phase 7. |
 | 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Version 0.82.0 festgeschrieben (E-13). Wiederholungsnachweis offen. |
 | 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7. |
-| 12 | IDS sieht durchgelassene Anfragen doppelt | Beim Bau der Dashboards berücksichtigen (E-08). |
-| 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Phase 4 (E-08, R-05). |
+| 12 | IDS sieht durchgelassene Anfragen doppelt | Bekannt. Ein Alarm von 10.10.10.6 → 10.10.10.10 zeigt, dass ein Angriff die WAF passiert hat. Für die Demo nutzbar. |
+| 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Offen (E-08, R-05). Alarme gehen inzwischen ans SIEM, `eve.json` dient nur noch dem Test. |
 | 14 | Bau der Images über VPN bricht ab | Hinweis im README, vor dem Labortermin Images bauen (R-06). |
