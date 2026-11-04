@@ -1,12 +1,13 @@
 # Adressplan – DMZ
 
-Stand: 2026-11-02, Version 0.2 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
+Stand: 2026-11-04, Version 0.3 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
 
 ## Regeln
 
 - Das Gateway erhält die erste Adresse des Subnetzes. Hosts beginnen bei `.10`.
 - Das dritte Oktett kennzeichnet die Zone: 0 Transit, 10 DMZ, 20 Client, 30 Backend.
 - Die Knoten laufen ohne Management-Netz (`network-mode: none`) und haben kein `eth0`. Eigene Links beginnen bei `eth1`. Jeder Verkehr läuft über den Datenpfad und damit durch die Firewalls (Test T-01, T-03d).
+- Einzige Ausnahme ist `siem`: Es hat ein `eth0` im Management-Netz von Containerlab, damit der Operator Grafana erreicht (K-12). Die drei SIEM-Dienste `siem-collector`, `siem-loki` und `siem-grafana` teilen sich das Netz von `siem` und damit die Adresse 10.10.30.10.
 - Jeder Link verbindet genau zwei Knoten .
 - Die Internet-Adressen stammen aus den Dokumentationsbereichen nach RFC 5737.
 
@@ -28,6 +29,7 @@ Stand: 2026-11-02, Version 0.2 (passend zu `DMZ_Netzplan_0.2.drawio` und `topolo
 | DMZ, Spiegelport | ohne Adresse | `fw-dmz` – `ids` |
 | Client-Netz | 10.10.20.0/24 | `router-int` – `client1` |
 | Backend-Netz | 10.10.30.0/24 | `fw-backend` – `siem` |
+| Management, nur `siem` | 172.20.20.0/24, Adresse von Docker vergeben | `siem` eth0 – VM, Port 3000 freigegeben |
 | VPN-Tunnel | 10.99.0.0/24 | `fw-edge` – `ro-client1`, `ro-client2` |
 
 Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz ist als 10.10.0.0/16 zusammenfassbar.
@@ -89,6 +91,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `fw-backend` | eth1 | 10.10.0.10/30 | `fw-edge` eth4 |
 | `fw-backend` | eth2 | 10.10.30.1/24 | `siem` eth1 |
 | `siem` | eth1 | 10.10.30.10/24 | `fw-backend` eth2 |
+| `siem` | eth0 | 172.20.20.x/24 (dynamisch) | Management-Netz, VM |
 
 ## Routen
 
@@ -109,6 +112,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `proxy`, `waf`, `web`, `ids` | Standard | Gateway des eigenen /30 |
 | `client1` | Standard | 10.10.20.1 |
 | `siem` | Standard | 10.10.30.1 |
+| `siem` | Antworten von der eth0-Adresse | Gateway des Management-Netzes, eigene Tabelle 100 (`configs/siem/mgmt-routing.sh`) |
 
 Die Clients des Remote Office schicken nur Verkehr für das Firmennetz durch den Tunnel. Der übrige Verkehr geht direkt ins Internet. Das VPN ist noch nicht umgesetzt, die Tunnel-Adressen und -Routen sind geplant.
 

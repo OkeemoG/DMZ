@@ -40,3 +40,21 @@ outputs:
             extended: yes
         - tls:
             extended: yes
+  - eve-log:
+      enabled: yes
+      filetype: syslog
+      identity: suricata
+      facility: local5
+      level: Info
+      xff:
+        enabled: yes
+        mode: extra-data
+        deployment: reverse
+        header: X-Forwarded-For
+      types:
+        - alert:
+            payload: no
+            payload-printable: no
+            packet: no
+            metadata: no
+            tagged-packets: no

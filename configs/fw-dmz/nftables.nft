@@ -10,6 +10,7 @@ table inet filter {
         ct state established,related accept
         ct state invalid drop
         icmp type echo-request limit rate 10/second accept comment "Diagnose"
+        limit rate 20/second burst 40 packets log prefix "fw-dmz input drop: " group 1 queue-threshold 1
         counter comment "verworfen"
     }
 
@@ -26,6 +27,7 @@ table inet filter {
         iifname { "eth2", "eth3", "eth4", "eth5" } oifname "eth1" ip saddr 10.10.10.0/24 ip daddr != 10.0.0.0/8 icmp type echo-request accept comment "K-06 DMZ -> Internet"
         iifname { "eth3", "eth5" } oifname "eth1" ip saddr { 10.10.10.6, 10.10.10.14 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09 Meldungen -> siem"
 
+        limit rate 20/second burst 40 packets log prefix "fw-dmz forward drop: " group 1 queue-threshold 1
         counter comment "verworfen"
     }
 

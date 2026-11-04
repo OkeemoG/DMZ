@@ -1,6 +1,6 @@
 # Technologieentscheidungen – DMZ-Laborumgebung
 
-Stand: 2026-11-02, Version 0.2.
+Stand: 2026-11-04, Version 0.3.
 
 Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Ressourcenbudget. Versionen werden in Phase 2 festgelegt.
 
@@ -17,11 +17,14 @@ Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Res
 | `proxy` | Nginx | `proxy` | 10–30 MB | 64 MB |
 | `waf` | Nginx, ModSecurity v3, OWASP CRS 4 | `waf` | 60–150 MB | 256 MB |
 | `web` | Python, Flask, gunicorn, SQLite | `web` | 30–80 MB | 128 MB |
-| `ids` | Suricata 8 | `ids` | 150–350 MB, gemessen 37 MB | 512 MB |
-| `siem` | Grafana, Loki, Fluent Bit (geplant) | `siem` (geplant) | 250–500 MB | 768 MB (geplant) |
-| Summe, 14 Container | | | 555–1255 MB | 2304 MB |
+| `ids` | Suricata 8 | `ids` | 150–350 MB, gemessen 37 MB | 256 MB |
+| `siem` | hält nur Adressen und Routen | `client` | gemessen 1 MB | 64 MB |
+| `siem-collector` | Fluent Bit | `fluent/fluent-bit:5.1.5` | gemessen 13 MB | 64 MB |
+| `siem-loki` | Loki | `grafana/loki:3.7.9` | gemessen 77–86 MB | 256 MB |
+| `siem-grafana` | Grafana | `grafana/grafana:13.3.0` | gemessen 316–350 MB | 512 MB |
+| Summe, 17 Container | | | gemessen ca. 520 MB | 2176 MB |
 
-Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-02 mit `docker stats` im laufenden Betrieb.
+Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit `docker stats` und `free -m` im laufenden Betrieb: 2598 MB verfügbar, kein Swap genutzt.
 
 ## Images
 
@@ -34,8 +37,8 @@ Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-02 mit
 | `waf` | `owasp/modsecurity-crs:4.30.0-nginx-alpine` | Nginx, ModSecurity v3, CRS 4.30, iproute2 | 110 MB |
 | `web` | `python:3.12-alpine3.24` | Flask, gunicorn, eigene Anwendung | 58,2 MB |
 | `ids` | `alpine:3.24` | Suricata 8.0.8, iproute2 | 87,2 MB |
-| `siem` | geplant | Grafana, Loki, Fluent Bit | 600–900 MB geschätzt |
-| Summe ohne `siem` | | | 373 MB |
+| `fluent/fluent-bit:5.1.5`, `grafana/loki:3.7.9`, `grafana/grafana:13.3.0` | offiziell, unverändert | SIEM | nicht einzeln gemessen, alle Images zusammen 2,2 GB (`docker system df`, 2026-11-04) |
+| Summe eigene Images | | | 373 MB |
 
 Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` dabei noch auf `alpine:3.20`. Verfügbar sind 7,0 GB Disk. Neun Knoten teilen sich die drei kleinen Images `fw`, `router` und `client`.
 
@@ -110,25 +113,35 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 ### E-09 SIEM mit Grafana und Loki
 
-- **Entscheidung:** Loki speichert und durchsucht die Meldungen. Grafana zeigt Dashboards und Alarme. Beides läuft im Knoten `siem`.
-- **Begründung:** Passt in das Speicherbudget. Der Wazuh-Indexer verlangt mindestens 4 GB RAM und scheidet damit aus. Elasticsearch und Graylog liegen in derselben Größenordnung.
-- **Grenze:** Grafana mit Loki ist eine Log-Plattform mit Alarmregeln, kein vollständiges SIEM. Es fehlen fertige Korrelationsregeln und Fallbearbeitung. Die Grenze gehört in das Fazit der Dokumentation.
-- **Alternative im Aufbau:** Drei getrennte Knoten für Grafana, Loki und Sammler. Unveränderte offizielle Images, dafür ein größerer Adressplan und mehr Firewall-Regeln.
+- **Entscheidung:** Fluent Bit nimmt die Meldungen an, Loki speichert und durchsucht sie, Grafana zeigt das Dashboard. Jeder Dienst läuft in einem eigenen Container mit unverändertem offiziellem Image. Alle drei teilen sich das Netz des Knotens `siem` (`network-mode: container:siem`), wie die Container eines Pods in Kubernetes. `siem` selbst hält nur Adressen und Routen.
+- **Begründung:** Passt in das Speicherbudget. Der Wazuh-Indexer verlangt mindestens 4 GB RAM und scheidet damit aus. Elasticsearch und Graylog liegen in derselben Größenordnung. Getrennte Container erlauben eine Speichergrenze je Dienst und brauchen keine Prozessverwaltung. Adressplan und Firewall-Regeln bleiben unverändert, weil alle Dienste unter 10.10.30.10 erreichbar sind und sich über `localhost` ansprechen.
+- **Abweichung vom Entwurf:** Das gemeinsame Image `lab-siem` entfällt, damit auch Risiko R-02.
+- **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, Admin-Passwort über `GRAFANA_PASSWORD`, ohne Verbindungen ins Internet.
+- **Grenze:** Grafana mit Loki ist eine Log-Plattform mit Abfragen und Dashboards, kein vollständiges SIEM. Es fehlen fertige Korrelationsregeln und Fallbearbeitung. Die Korrelation über das Feld `client` (E-14) ist ein einfacher Ersatz. Die Grenze gehört in das Fazit der Dokumentation.
 - **Anforderungen:** SYS-07, MON-02, MON-03, MON-05.
 
 ### E-10 Meldeweg über Syslog
 
-- **Entscheidung:** Die vier meldenden Systeme senden Syslog über UDP 5140 an `siem`. Dort nimmt Fluent Bit die Meldungen an und übergibt sie an Loki.
-- **Begründung:** Kein Agent auf den meldenden Systemen. Nginx sendet Syslog selbst (`error_log syslog:server=…`). Suricata schreibt nur in den lokalen Syslog, für die Weiterleitung braucht es im Container einen Weiterleiter, z. B. `busybox syslogd -R` (ungeprüft, Phase 4). UDP puffert nicht, das hilft bei der Vorgabe von 1 s.
+- **Entscheidung:** Die vier meldenden Systeme senden Syslog über UDP 5140 an `siem`, wo Fluent Bit die Meldungen annimmt. Die Wege je Quelle:
+
+| Quelle | Weg |
+|---|---|
+| `waf` | Nginx sendet sein Fehlerprotokoll zusätzlich per Syslog, Stufe `info` (`configs/waf/siem.conf`). Fluent Bit verwirft Zeilen ohne „ModSecurity:“. |
+| `ids` | Zweite eve-Ausgabe von Suricata mit `filetype: syslog`, nur Alarme, ohne Paketinhalt und Zusatzdaten. Im Container leitet `busybox syslogd -R` weiter. |
+| `fw-edge`, `fw-dmz` | NFLOG und ulogd2 (E-11), ebenfalls über `busybox syslogd -R` |
+
+- **Begründung:** Kein eigener Agent auf den meldenden Systemen. UDP puffert nicht, Fluent Bit gibt alle 0,2 s an Loki weiter. Gemessen vom Ereignis bis zur Auffindbarkeit in Loki: im Mittel 167 bis 314 ms, höchstens 650 ms (Tests S-02 bis S-05).
+- **Grenze:** BusyBox verarbeitet höchstens 2048 Zeichen pro Meldung. Deshalb gehen Suricata-Alarme ohne Paketinhalt und Metadaten hinaus. BusyBox schickt keinen Hostnamen mit. Fluent Bit setzt `host` beim IDS über die Programmkennung, bei den Firewalls über die Absenderadresse.
+- **Grenze:** Syslog über UDP ist unverschlüsselt und nicht authentifiziert. `fw-backend` lässt nur die vier Absenderadressen zu (K-09 bis K-11).
 - **Alternativen:** Fluent Bit auf jedem meldenden System (strukturierte Daten, vier zusätzliche Dienste). Promtail (seit dem 2. März 2026 abgekündigt). Grafana Alloy (Nachfolger, deutlich größer).
-- **Grenze:** Syslog über UDP ist unverschlüsselt und nicht authentifiziert. Die Firewalls lassen nur die vier Absenderadressen zu.
 - **Anforderungen:** MON-02, MON-04.
 
 ### E-11 Firewall-Meldungen über NFLOG und ulogd2
 
-- **Entscheidung:** Die Regelwerke protokollieren mit `log group`. ulogd2 im selben Container nimmt die Einträge an und gibt sie als Syslog weiter.
-- **Begründung:** Der Kernel verwirft gewöhnliche Log-Einträge aus Containern. Die Freischaltung gelingt nur auf dem Host, und die Einträge landen dann im Kernel-Log des Hosts. NFLOG ist davon nicht betroffen.
-- **Geprüft:** ulogd ist im Image `fw` enthalten (Test `test-images`). Das Zusammenspiel im Container ist ungeprüft, Phase 4.
+- **Entscheidung:** `fw-edge` und `fw-dmz` protokollieren verworfene Pakete mit `log prefix "<firewall> <kette> drop: " group 1 queue-threshold 1`, gedrosselt auf 20 Meldungen pro Sekunde mit 40 als Puffer. ulogd2 im selben Container nimmt die Einträge an und gibt sie als Text an den lokalen Syslog weiter (`configs/fw/ulogd.conf`).
+- **Begründung:** Der Kernel verwirft gewöhnliche Log-Einträge aus Containern. NFLOG ist davon nicht betroffen. Die Drosselung verhindert, dass ein Angreifer mit einem schnellen Scan das SIEM flutet. Ein Scan bleibt mit 20 Meldungen pro Sekunde deutlich erkennbar.
+- **Gemessen:** Ohne `queue-threshold 1` sammelt der Kernel bis zu 100 Meldungen oder 1 s, bevor er sie weitergibt. Die Meldungen brauchten dann 1,1 bis 1,2 s. Mit `queue-threshold 1` liegen sie wie die übrigen Quellen bei etwa 0,2 s (Test S-05).
+- **Abgrenzung:** `fw-backend` meldet nicht. Was aus dem Internet oder dem Client-Netz ins Backend will, verwirft bereits `fw-edge`.
 - **Anforderung:** MON-02.
 
 ### E-12 Kein Namensdienst
@@ -143,16 +156,38 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** `scripts/install.sh` installiert Containerlab 0.82.0. Eine andere Version lässt sich mit `CLAB_VERSION` setzen.
 - **Begründung:** Die Installation ist wiederholbar und verhält sich auf der Labor-VM wie auf den Entwicklungs-VMs.
 
+### E-14 Normalisierung im Collector
+
+- **Entscheidung:** Fluent Bit zerlegt die Meldungen beim Eingang in Felder (`configs/siem/fluent-bit.yaml`): Suricata-Alarme als JSON, WAF und Firewalls über die regulären Ausdrücke `waf-deny`, `waf-warn` und `fw-drop`. Die Herkunft heißt bei allen Sensoren `client`: bei der WAF die echte Client-Adresse, beim IDS `xff` und ersatzweise `src_ip`, bei den Firewalls die Quelladresse. Die Originalmeldung bleibt erhalten.
+- **Begründung:** Ein einheitliches Feld macht die Korrelation über Sensoren hinweg zu einer einfachen Abfrage („Top-Quellen“). Die Dashboard-Abfragen bleiben kurz und lesbar.
+- **Geprüft:** Die Ausdrücke wurden an allen echten Meldungen eines Testlaufs geprüft. Die Tests S-03 bis S-05 prüfen die Felder bei jedem Lauf.
+
+### E-15 Zugang des Operators über ein Out-of-Band-Netz
+
+- **Entscheidung:** Nur `siem` erhält ein Management-Netz (`network-mode: bridge`). Docker gibt Port 3000 auf der VM frei. `configs/siem/mgmt-routing.sh` leitet eigenen Verkehr von `siem` über `fw-backend` und schickt nur Antworten an den Browser über `eth0` zurück. IPv6 ist auf `eth0` abgeschaltet.
+- **Begründung:** Ein eigenes Netz für den Operator entspricht dem Out-of-Band-Management echter SOCs. Es führt in keine Zone. Das SIEM erhält darüber keinen Internetzugang am Firewall-Konzept vorbei (V-08).
+- **Alternative:** Leitung von `siem` in die VM über einen `host:`-Endpunkt von Containerlab. Die Adresse auf der VM-Seite müsste bei jedem Start mit `sudo` gesetzt werden, ohne Vorteil.
+- **Anforderung:** MON-03 (K-12).
+
+### E-16 Dashboard und Anzeige innerhalb von 1 s
+
+- **Entscheidung:** Das Dashboard „SOC – DMZ“ (`configs/siem/dashboards/soc.json`) wird beim Start geladen, ist die Startseite von Grafana und aktualisiert sich jede Sekunde. Inhalt: Zähler je Sensor, Alarm-Stream mit einer lesbaren Zeile je Ereignis, Top-Quellen über alle Sensoren, Verlauf je Sensor, Angriffsarten der WAF, Signaturen des IDS, Zielports und Regelketten der Firewalls, angegriffene Pfade.
+- **Begründung:** Bei 1 s Aktualisierung liegt die Anzeige im Mittel unter 1 s, im ungünstigsten Fall bei etwa 1,2 s. Für die garantierte Vorgabe verlinkt das Dashboard dieselbe Alarm-Abfrage in Explore. Dort schiebt Grafana neue Meldungen im Modus „Live“ ohne Abfrage-Intervall nach.
+- **Geprüft:** Alle zwölf Abfragen wurden gegen Loki 3.7.9 ausgeführt. Test S-06 prüft Dashboard, Startseite und Alarm-Stream.
+- **Anforderungen:** MON-03, MON-05.
+
 ## Risiken und Prüfungen
 
 | Nr. | Risiko | Prüfung |
 |---|---|---|
-| R-01 | Die Anzeige im Dashboard dauert länger als 1 s. Grafana aktualisiert standardmäßig frühestens alle 5 s. Die Einstellung `min_refresh_interval` senkt den Wert. Berichte über die Wirkung sind uneinheitlich. | Vorabtest zu Beginn von Phase 4, vor dem Bau der Dashboards. |
-| R-02 | Das gemeinsame Image `lab-siem` mit drei Diensten lässt sich nicht sauber bauen. | Ausweichen auf drei Knoten (E-09). |
+| R-01 | Die Anzeige im Dashboard dauert länger als 1 s. | Erledigt: Transport bis Loki gemessen 50 bis 650 ms (S-02 bis S-05), `min_refresh_interval` auf 1 s, Live-Ansicht für die garantierte Vorgabe (E-16). |
+| R-02 | Das gemeinsame Image `lab-siem` mit drei Diensten lässt sich nicht sauber bauen. | Entfällt: drei Container mit offiziellen Images (E-09). |
 | R-03 | nftables, tc und WireGuard brauchen erweiterte Rechte im Container. | Erledigt: Test R-03 in `test-topology` bestanden. |
-| R-04 | Suricata belegt mehr RAM als geschätzt. | Erledigt: gemessen 37 MB von 512 MB (2026-11-02). |
-| R-05 | Logs füllen die Disk. | Aufbewahrungsdauer in Loki begrenzen, Log-Größe der Container begrenzen, `eve.json` begrenzen. |
+| R-04 | Suricata belegt mehr RAM als geschätzt. | Erledigt: gemessen 37 MB, Grenze auf 256 MB gesenkt. |
+| R-05 | Logs füllen die Disk. | Loki speichert 24 h. Offen: `eve.json` und Container-Logs begrenzen. |
 | R-06 | Der Bau der Images bricht über ein VPN ab (`I/O error` bei `apk`), weil das VPN die MTU verkleinert. | Images ohne VPN bauen oder die MTU von Docker anpassen. Vor dem Labortermin alle Images bauen. Hinweis im README. |
+| R-07 | Grafana erreicht seine Speichergrenze und wird vom Kernel beendet. | Gemessen bis 349 MB, Grenze von 384 auf 512 MB erhöht. Test S-00 prüft auf Abbruch wegen Speichermangel. |
+| R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. |
 
 ## Quellen
 
