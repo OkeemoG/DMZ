@@ -139,7 +139,7 @@ topology:
     ids:
       kind: linux
       image: ids:0.1
-      memory: 512MB
+      memory: 256MB
       binds:
         - ../configs/ids/lab.yaml:/etc/suricata/lab.yaml:ro
         - ../configs/ids/local.rules:/etc/suricata/local.rules:ro
