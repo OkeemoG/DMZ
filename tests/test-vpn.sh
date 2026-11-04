@@ -63,8 +63,8 @@ secs() { # Text, Zeilenanfang, Bezeichnung -> groesster Wert hinter der Bezeichn
   printf '%s\n' "$1" | sed -n "s/^$2.*$3 \([0-9]*\)s.*/\1/p" | sort -n | tail -1
 }
 
-detail() { # Ergebnis, Ausgabe -> Ausgabe eingerueckt anzeigen, wenn das Ergebnis nicht yes ist
-  [ "$1" = yes ] || printf '%s\n' "$2" | head -8 | sed 's/^/         | /'
+detail() { # Ergebnis, Ausgabe -> letzte Zeilen der Ausgabe eingerueckt anzeigen, wenn das Ergebnis nicht yes ist
+  [ "$1" = yes ] || printf '%s\n' "$2" | tail -10 | sed 's/^/         | /'
 }
 
 conn() { # Knoten, Ziel, Port -> ok|fail (TCP-Verbindungsaufbau)
@@ -222,6 +222,7 @@ echo "== Rejected methods (TR-02102-3)"
 # Probeverbindungen auf ro-client2 zusaetzlich zur bestehenden Verbindung firmennetz.
 # Die Datei liegt in /etc/swanctl: swanctl --file setzt das Basisverzeichnis fuer relative
 # Pfade (certs = client.crt, private/) auf das Verzeichnis der Datei (swanctl.c).
+# mobike = no wie in ro-client.conf: sonst wechselt IKE_AUTH auf UDP 4500, das fw-edge verwirft.
 docker exec -i "${P}-ro-client2" sh -c 'cat > /etc/swanctl/probe.conf' <<'EOF'
 include /etc/swanctl/swanctl.conf
 
@@ -229,6 +230,7 @@ connections {
     probe-legacy {
         version = 2
         remote_addrs = 203.0.113.2
+        mobike = no
         proposals = aes128-sha1-modp1024
         local {
             auth = pubkey
@@ -247,6 +249,7 @@ connections {
     probe-modp2048 {
         version = 2
         remote_addrs = 203.0.113.2
+        mobike = no
         proposals = aes256gcm16-prfsha512-modp2048
         local {
             auth = pubkey
@@ -265,6 +268,7 @@ connections {
     probe-chacha {
         version = 2
         remote_addrs = 203.0.113.2
+        mobike = no
         proposals = chacha20poly1305-prfsha256-curve25519
         local {
             auth = pubkey
@@ -283,6 +287,7 @@ connections {
     probe-psk {
         version = 2
         remote_addrs = 203.0.113.2
+        mobike = no
         proposals = aes256gcm16-prfsha512-ecp512bp
         local {
             auth = psk
