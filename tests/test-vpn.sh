@@ -59,8 +59,12 @@ waitup() { # Sekunden, Knoten:Verbindung ... -> yes|no
   echo no
 }
 
-maxsec() { # Text, Zeilenanfang -> groesster Wert hinter "expires in" in Sekunden
-  printf '%s\n' "$1" | sed -n "s/^$2.*expires in \([0-9]*\)s.*/\1/p" | sort -n | tail -1
+secs() { # Text, Zeilenanfang, Bezeichnung -> groesster Wert hinter der Bezeichnung in Sekunden
+  printf '%s\n' "$1" | sed -n "s/^$2.*$3 \([0-9]*\)s.*/\1/p" | sort -n | tail -1
+}
+
+detail() { # Ergebnis, Ausgabe -> Ausgabe eingerueckt anzeigen, wenn das Ergebnis nicht yes ist
+  [ "$1" = yes ] || printf '%s\n' "$2" | head -8 | sed 's/^/         | /'
 }
 
 conn() { # Knoten, Ziel, Port -> ok|fail (TCP-Verbindungsaufbau)
@@ -69,12 +73,12 @@ conn() { # Knoten, Ziel, Port -> ok|fail (TCP-Verbindungsaufbau)
   if $run "$1" socat -T1 /dev/null "TCP:$2:$3,connect-timeout=2" >/dev/null 2>&1; then echo ok; else echo fail; fi
 }
 
-udp() { # Knoten, Token -> yes|no: Token bei siem auf UDP 5140 angekommen
+udp() { # Knoten, Token -> yes|no: Syslog-Meldung mit Token kommt im SIEM (Loki) an, wie in test-matrix.sh
   local run=x
   case "$1" in waf) run=side ;; esac
-  $run "$1" sh -c "echo $2 | socat -u - UDP-SENDTO:10.10.30.10:5140" >/dev/null 2>&1
-  for _ in 1 2 3 4; do
-    x siem grep -qF "$2" /tmp/udp-5140.log 2>/dev/null && { echo yes; return; }
+  $run "$1" sh -c "echo \"<134>\$(date '+%b %e %H:%M:%S') $1 dmztest: $2\" | socat -u - UDP-SENDTO:10.10.30.10:5140" >/dev/null 2>&1
+  for _ in 1 2 3 4 5 6; do
+    x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query={job=\"dmz\"} |= \"$2\"" --data-urlencode "limit=1" 2>/dev/null | grep -q '"result":\[{' && { echo yes; return; }
     sleep 0.5
   done
   echo no
@@ -99,8 +103,9 @@ dropped() { # Paketzaehler "verworfen" im input von fw-edge
 }
 
 echo "== Service"
+# pidof statt pgrep -x: BusyBox-pgrep -x vergleicht mit argv[0], also mit dem vollen Pfad /usr/lib/strongswan/charon
 for n in fw-edge ro-client1 ro-client2; do
-  if x "$n" pgrep -x charon >/dev/null 2>&1; then r=ok; else r=fail; fi
+  if x "$n" pidof charon >/dev/null 2>&1; then r=ok; else r=fail; fi
   result N-00 "$n: charon running" ok "$r"
 done
 result N-00 "fw-edge: strongSwan 6.0 answers on vici" yes "$(has "$(x fw-edge swanctl --version --daemon 2>&1)" '^strongSwan 6\.0\.[0-9]+ charon')"
@@ -123,15 +128,19 @@ for i in 1 2; do
   result N-01 "fw-edge: ro-client$i identified by certificate, address $vip, no NAT-T" yes "$(has "$s" "^  remote 'CN=ro-client$i' @ ${pub//./\\.}\[500\] \[${vip//./\\.}\]")"
   result N-01 "fw-edge: ro-client$i IKE AES-GCM-256, HMAC-SHA2-512, brainpoolP512r1 (Tab. 3, 4, 6)" yes "$(has "$s" '^  AES_GCM_16-256/PRF_HMAC_SHA2_512/ECP_512_BP$')"
   result N-01 "fw-edge: ro-client$i ESP AES-GCM-256 in tunnel mode (Tab. 8, 2.2.2)" yes "$(has "$s" 'INSTALLED, TUNNEL, ESP:AES_GCM_16-256')"
-  m=$(maxsec "$s" '  established')
-  [ -n "$m" ] && [ "$m" -le 86400 ] && r=yes || r=no
-  result N-01 "fw-edge: ro-client$i IKE SA lifetime at most 24 h (3.4, ${m:-?} s)" yes "$r"
-  m=$(maxsec "$s" '    installed')
+  m=$(secs "$s" '  established' 'rekeying in')
+  [ -n "$m" ] && [ "$m" -le 14400 ] && r=yes || r=no
+  result N-01 "fw-edge: ro-client$i IKE SA rekeyed within 4 h (${m:-?} s)" yes "$r"
+  m=$(secs "$s" '    installed' 'expires in')
   [ -n "$m" ] && [ "$m" -le 14400 ] && r=yes || r=no
   result N-01 "fw-edge: ro-client$i IPsec SA lifetime at most 4 h (3.4, ${m:-?} s)" yes "$r"
   c=$(ike "ro-client$i" firmennetz)
   result N-01 "ro-client$i: fw-edge identified by certificate" yes "$(has "$c" "^  remote 'CN=fw-edge' @ 203\.0\.113\.2\[500\]")"
 done
+# Die Ablaufzeit einer IKE-SA meldet vici nicht (vici_query.c), charon schreibt sie beim Aufbau ins Log (ike_sa.c)
+m=$(x fw-edge sed -n 's/.*maximum IKE_SA lifetime \([0-9]*\)s.*/\1/p' /var/log/charon.log 2>/dev/null | sort -n | tail -1)
+[ -n "$m" ] && [ "$m" -le 86400 ] && r=yes || r=no
+result N-01 "fw-edge: IKE SA lifetime at most 24 h (3.4, ${m:-?} s)" yes "$r"
 
 echo "== Virtual address"
 for i in 1 2; do
@@ -173,10 +182,8 @@ result N-05 "ro-client1: rekeyed CHILD_SA uses a new key exchange ECP_512_BP (2.
 result N-05 "ro-client1 -> proxy after rekeying" 200 "$(code ro-client1 "https://10.10.10.2/health?m=$RUN-5")"
 
 echo "== Start test services"
-for n in client1 siem ro-client1; do x "$n" pkill socat >/dev/null 2>&1; done
+for n in client1 ro-client1; do x "$n" pkill socat >/dev/null 2>&1; done
 docker exec -d "${P}-client1" socat TCP-LISTEN:8080,fork,reuseaddr "SYSTEM:echo ok"
-x siem rm -f /tmp/udp-5140.log
-docker exec -d "${P}-siem" socat -u UDP-RECV:5140 OPEN:/tmp/udp-5140.log,creat,append
 docker exec -d "${P}-ro-client1" socat TCP-LISTEN:443,fork,reuseaddr "SYSTEM:echo ok"
 sleep 1
 result N-06 "control: test service client1 TCP 8080 listening" ok "$(conn client1 127.0.0.1 8080)"
@@ -199,7 +206,7 @@ result N-07 "client1 -> ro-client1 10.99.0.2 TCP 443" fail "$(conn client1 10.99
 result N-07 "web -> ro-client1 10.99.0.2 TCP 443" fail "$(conn web 10.99.0.2 443)"
 
 echo "== Stop test services"
-for n in client1 siem ro-client1; do x "$n" pkill socat >/dev/null 2>&1; done
+for n in client1 ro-client1; do x "$n" pkill socat >/dev/null 2>&1; done
 
 echo "== VPN endpoint only for the remote office (K-07)"
 d0=$(dropped)
@@ -212,8 +219,10 @@ result N-08 "attacker -> fw-edge UDP 500 and ESP dropped (${d0:-?} -> ${d1:-?} p
 result N-08 "charon on fw-edge never saw 192.0.2.10" 0 "$(x fw-edge grep -c '192\.0\.2\.10' /var/log/charon.log 2>/dev/null)"
 
 echo "== Rejected methods (TR-02102-3)"
-# Probeverbindungen auf ro-client2 zusaetzlich zur bestehenden Verbindung firmennetz
-docker exec -i "${P}-ro-client2" sh -c 'cat > /tmp/probe.conf' <<'EOF'
+# Probeverbindungen auf ro-client2 zusaetzlich zur bestehenden Verbindung firmennetz.
+# Die Datei liegt in /etc/swanctl: swanctl --file setzt das Basisverzeichnis fuer relative
+# Pfade (certs = client.crt, private/) auf das Verzeichnis der Datei (swanctl.c).
+docker exec -i "${P}-ro-client2" sh -c 'cat > /etc/swanctl/probe.conf' <<'EOF'
 include /etc/swanctl/swanctl.conf
 
 connections {
@@ -297,19 +306,26 @@ secrets {
     }
 }
 EOF
-x ro-client2 swanctl --load-conns --file /tmp/probe.conf >/dev/null 2>&1
-x ro-client2 swanctl --load-creds --file /tmp/probe.conf >/dev/null 2>&1
+out=$(x ro-client2 swanctl --load-conns --file /etc/swanctl/probe.conf 2>&1)
+r=$(has "$out" 'successfully loaded 5 connections')
+result N-09 "probe connections loaded (firmennetz and 4 probes)" yes "$r"
+detail "$r" "$out"
+x ro-client2 swanctl --load-creds --file /etc/swanctl/probe.conf >/dev/null 2>&1
 n0=$(x fw-edge grep -c 'received proposals unacceptable' /var/log/charon.log 2>/dev/null)
 for c in "probe-legacy:AES-CBC-128, SHA-1, MODP-1024" "probe-modp2048:MODP-2048 (not in Tab. 6)" "probe-chacha:ChaCha20-Poly1305, Curve25519"; do
   out=$(x ro-client2 swanctl --initiate --ike "${c%%:*}" --child p --timeout 15 2>&1)
-  result N-09 "IKE proposal ${c#*:} rejected" yes "$(has "$out" 'received NO_PROPOSAL_CHOSEN notify error')"
+  r=$(has "$out" 'received NO_PROPOSAL_CHOSEN notify error')
+  result N-09 "IKE proposal ${c#*:} rejected" yes "$r"
+  detail "$r" "$out"
 done
 n1=$(x fw-edge grep -c 'received proposals unacceptable' /var/log/charon.log 2>/dev/null)
 result N-09 "fw-edge logs the 3 rejected proposals" 3 "$(( ${n1:-0} - ${n0:-0} ))"
 out=$(x ro-client2 swanctl --initiate --ike probe-psk --child p --timeout 15 2>&1)
-result N-09 "pre-shared key rejected with valid proposal (Tab. 7)" yes "$(has "$out" 'received AUTHENTICATION_FAILED notify error')"
+r=$(has "$out" 'received AUTHENTICATION_FAILED notify error')
+result N-09 "pre-shared key rejected with valid proposal (Tab. 7)" yes "$r"
+detail "$r" "$out"
+x ro-client2 rm -f /etc/swanctl/probe.conf
 x ro-client2 swanctl --load-all >/dev/null 2>&1
-x ro-client2 rm -f /tmp/probe.conf
 result N-09 "probe connections removed again" no "$(has "$(x ro-client2 swanctl --list-conns 2>/dev/null)" '^probe-')"
 result N-09 "ro-client2 tunnel unaffected" yes "$(waitup 30 ro-client2:firmennetz)"
 
