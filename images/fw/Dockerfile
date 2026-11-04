@@ -6,6 +6,6 @@ RUN apk add --no-cache \
       nftables \
       ulogd \
       tcpdump \
-      wireguard-tools
+      strongswan
 
 CMD ["sleep", "infinity"]

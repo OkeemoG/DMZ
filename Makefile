@@ -1,11 +1,14 @@
-.PHONY: images deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-all
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-all
 
-TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web
+TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn
 
 images:
 	bash scripts/build-images.sh
 
-deploy: images
+pki: images
+	bash scripts/gen-vpn-pki.sh
+
+deploy: images pki
 	containerlab deploy -t topology/dmz.clab.yml --reconfigure
 
 destroy:
@@ -25,6 +28,9 @@ test-proxy:
 
 test-ids:
 	bash tests/test-ids.sh
+
+test-vpn:
+	bash tests/test-vpn.sh
 
 test-basic:
 	containerlab deploy -t topology/basicTest.clab.yml

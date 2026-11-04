@@ -10,7 +10,8 @@ table inet filter {
         ct state established,related accept
         ct state invalid drop
         icmp type echo-request limit rate 10/second accept comment "Diagnose"
-        iifname "eth1" ip saddr { 198.51.100.2, 198.51.100.6 } udp dport 51820 accept comment "K-07 VPN-Aufbau"
+        iifname "eth1" ip saddr { 198.51.100.2, 198.51.100.6 } udp dport 500 accept comment "K-07 VPN-Aufbau (IKEv2)"
+        iifname "eth1" ip saddr { 198.51.100.2, 198.51.100.6 } meta l4proto esp accept comment "K-07 VPN-Daten (ESP)"
         counter comment "verworfen"
     }
 
@@ -21,11 +22,11 @@ table inet filter {
 
         iifname "eth1" oifname "eth2" ip daddr 10.10.10.2 tcp dport { 80, 443 } ct status dnat accept comment "K-01 Internet -> proxy"
         iifname "eth3" oifname "eth2" ip saddr 10.10.20.0/24 ip daddr 10.10.10.2 tcp dport 443 accept comment "K-04 Client -> proxy"
-        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 tcp dport { 80, 443 } accept comment "K-05 Client -> Internet"
-        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 icmp type echo-request accept comment "K-05 Client -> Internet"
-        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 tcp dport { 80, 443 } accept comment "K-06 DMZ -> Internet"
-        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 icmp type echo-request accept comment "K-06 DMZ -> Internet"
-        iifname "wg0" oifname "eth2" ip saddr { 10.99.0.2, 10.99.0.3 } ip daddr 10.10.10.2 tcp dport 443 accept comment "K-08 VPN -> proxy"
+        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 ip daddr != 10.0.0.0/8 tcp dport { 80, 443 } accept comment "K-05 Client -> Internet"
+        iifname "eth3" oifname "eth1" ip saddr 10.10.20.0/24 ip daddr != 10.0.0.0/8 icmp type echo-request accept comment "K-05 Client -> Internet"
+        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 ip daddr != 10.0.0.0/8 tcp dport { 80, 443 } accept comment "K-06 DMZ -> Internet"
+        iifname "eth2" oifname "eth1" ip saddr 10.10.10.0/24 ip daddr != 10.0.0.0/8 icmp type echo-request accept comment "K-06 DMZ -> Internet"
+        iifname "eth1" oifname "eth2" meta ipsec exists ip saddr { 10.99.0.2, 10.99.0.3 } ip daddr 10.10.10.2 tcp dport 443 accept comment "K-08 VPN -> proxy"
         iifname "eth2" oifname "eth4" ip saddr { 10.10.10.6, 10.10.10.14, 10.10.0.2 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09, K-10 Meldungen -> siem"
 
         counter comment "verworfen"

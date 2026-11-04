@@ -5,7 +5,7 @@ RUN apk add --no-cache \
       iproute2 \
       curl \
       tcpdump \
-      wireguard-tools \
+      strongswan \
       socat \
       openssl
 

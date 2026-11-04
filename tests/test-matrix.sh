@@ -8,7 +8,7 @@
 # schreiben Empfangenes in eine Datei, wie ein Syslog-Empfaenger ohne Antwort. Jeder
 # Negativtest hat also einen echten Dienst am Ziel. Scheitert die Verbindung,
 # liegt das an Firewall, Routing oder Adressumsetzung, nicht an einem fehlenden Dienst.
-# Noch nicht enthalten: K-07, K-08, V-10 (VPN, 3.7), V-11 (Spiegelport, 3.6),
+# Nicht enthalten: K-07, K-08, V-10, V-13 (VPN, tests/test-vpn.sh), V-11 (Spiegelport, tests/test-ids.sh),
 # K-10, K-11 (Meldungen der Firewalls selbst, Phase 4).
 set -uo pipefail
 
