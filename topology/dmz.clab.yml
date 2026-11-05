@@ -136,6 +136,7 @@ topology:
         - ../configs/waf/realip.conf:/etc/nginx/conf.d/00-realip.conf:ro
         - ../configs/waf/siem.conf:/etc/nginx/conf.d/10-siem.conf:ro
         - ../configs/waf/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:/opt/owasp-crs/rules/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf:ro
+        - ../configs/waf/REQUEST-899-DMZ-VIRTUAL-PATCHES.conf:/opt/owasp-crs/rules/REQUEST-899-DMZ-VIRTUAL-PATCHES.conf:ro
       env:
         BACKEND: http://10.10.10.10:8080
         PORT: "8080"

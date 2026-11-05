@@ -9,6 +9,7 @@ RUN="a3-$(date +%H%M%S)"
 head1 "A-3  Compromised internal host  (client1 10.10.20.10)"
 echo "   Scenario: an attacker controls an internal workstation and tries to"
 echo "   attack the portal and then pivot to other systems."
+wait_waf
 
 stage "Stage 1  Attack the portal from inside (through proxy and WAF)"
 icode() { client curl -sk -o /dev/null -w '%{http_code}' "$@" 2>/dev/null; }
