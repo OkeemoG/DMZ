@@ -14,7 +14,7 @@ Stand: 2026-11-05, Version 0.1, Phase 5. Anforderung der Aufgabenstellung: „Di
 |---|---|
 | Containerlab startet jeden Knoten der Art `linux` privilegiert (`PrivilegedByDefault`, Quelle: `nodes/node_registry.go` in Containerlab 0.82). Das betraf auch `web`, `proxy`, `waf`, `ids` und die SIEM-Dienste. | Ein Angreifer mit Codeausführung im Webserver hat alle Rechte des Hosts: Geräte, Dateisysteme, Kernelmodule. Der Ausbruch aus dem Container ist trivial. |
 | Die Firewalls dürfen selbst beliebig nach außen senden (`output` mit `policy accept`). | Ein kompromittierter Dienst auf einer Firewall (IKE, `sshd`) kann Daten abfließen lassen oder nachladen. |
-| Kernel-Einstellungen der Router und Server unverändert, `ip_forward` vom Host geerbt. | ICMP-Redirects und Source-Routing können Verkehr umleiten. DMZ-Server würden Pakete weiterleiten. |
+| Kernel-Einstellungen der Router und Server unverändert, `ip_forward` vom Host geerbt. | ICMP-Redirects und Source-Routing können Verkehr umleiten. DMZ-Server leiten Pakete weiter. |
 | Suricata läuft ohne Überwachung, `eve.json` wächst unbegrenzt (offener Punkt 13, R-05). | Ein Absturz des IDS bleibt unbemerkt, die Disk läuft voll. |
 | Grafana mit Standardpasswort `dmz-soc` aus dem Repo. | Jeder mit Zugang zum Repo kennt das Passwort des SOC. |
 | Das Image `waf` wechselt für `apk` auf root und bleibt dabei. | Der Nginx-Master der WAF läuft als root, obwohl das Upstream-Image ohne root gedacht ist. |
@@ -45,7 +45,12 @@ Wirkung (H-03, Root-Shell im Webserver): Einhängen von Dateisystemen, Schreiben
 
 ### Kernel-Einstellungen (H-04)
 
-Für die Gruppen `router` und `dmz` über `sysctls`: keine ICMP-Redirects annehmen oder senden, kein Source-Routing, SYN-Cookies, ICMP-Broadcasts und fehlerhafte ICMP-Antworten ignorieren, IPv6 abgeschaltet (wird nicht genutzt). Die Werte gelten für `all` und `default`, damit auch die später von Containerlab angelegten Schnittstellen sie erhalten. DMZ-Server leiten nicht weiter (`ip_forward` 0), Router schon.
+Für die Gruppen `router` und `dmz` über `sysctls`: keine ICMP-Redirects annehmen oder senden, kein Source-Routing, SYN-Cookies, ICMP-Broadcasts und fehlerhafte ICMP-Antworten ignorieren. Die Werte gelten für `all` und `default`, damit auch die später von Containerlab angelegten Schnittstellen sie erhalten. Router leiten weiter (`ip_forward` 1).
+
+Zwei Funde aus dem ersten Lauf in der VM:
+
+- Ein neuer Netz-Namespace erbt die IPv4-Einstellungen des Hosts, auf dem Docker-Host also `ip_forward` 1. Wer `ip_forward` schreibt, setzt im Kernel zugleich `accept_redirects` für `all` zurück (`inet_forward_change`: Redirects nur annehmen, wenn nicht weitergeleitet wird). runc setzt die `sysctls` in zufälliger Reihenfolge, damit stand `accept_redirects` mal auf 0, mal auf 1. Die DMZ-Server schalten die Weiterleitung deshalb über `conf.default.forwarding` 0 ab, das gilt für `eth1` und lässt `all` unberührt.
+- Docker verwaltet `disable_ipv6` beim Aufbau des Netz-Namespace selbst. Die gesetzten Werte kamen nicht verlässlich an. IPv6 wird im Labor nicht genutzt, alle Firewalls verwerfen es (Tabellen `inet`, `policy drop` in `input` und `forward`). Die beiden Spiegelports (`ids` `eth2`, `fw-dmz` `eth6`) erhalten über `ip link set … addrgenmode none` sicher keine IPv6-Adresse (V-11), dafür genügt `NET_ADMIN`.
 
 ### Ausgehender Verkehr der Firewalls (H-05)
 
@@ -89,11 +94,11 @@ Verworfene Pakete melden `fw-edge` und `fw-dmz` gedrosselt als `output drop` an 
 | H-01 | Alle zwölf gehärteten Container nicht privilegiert, `no-new-privileges` aktiv, ohne `SYS_ADMIN`, `SYS_MODULE`, `SYS_RAWIO`, `SYS_PTRACE`, `DAC_READ_SEARCH`, `NET_ADMIN` nur wo nötig |
 | H-02 | WAF, Fluent Bit, Loki, Grafana und Responder ohne root, Worker von Webanwendung und Proxy ohne root |
 | H-03 | Ausbruchsversuche aus einer Root-Shell im Webserver scheitern |
-| H-04 | Kernel-Einstellungen auf Routern und Servern, auch auf `eth1` |
+| H-04 | Kernel-Einstellungen auf Routern und Servern (`all` und `eth1`), DMZ-Server leiten auf `eth1` nicht weiter, Spiegelports ohne Adresse, Firewalls verwerfen auch IPv6 |
 | H-05 | Output-Ketten: `fw-edge` und `fw-dmz` erreichen das Internet nicht selbst, Zähler und Meldung im SIEM, VPN und K-13 funktionieren weiter |
 | H-06 | Suricata wird nach einem `kill -9` neu gestartet, der Neustart erscheint im SIEM, danach erkennt das IDS wieder Angriffe. Eine Logdatei über 50 MB wird geleert und gemeldet. |
 | H-07 | Docker-Logs mit Größengrenze |
-| H-08 | Slowloris: unvollständiger Kopf nach dem Zeitlimit geschlossen, Zeitlimits und Verbindungsgrenze aktiv |
+| H-08 | Slowloris: unvollständiger Kopf nach dem Zeitlimit geschlossen (gemessen beim Ende des Clients), Zeitlimits und Verbindungsgrenze aktiv |
 | H-09 | Altes Standardpasswort abgewiesen, neues angenommen, ohne Anmeldung kein Zugriff, Passwortdatei geschützt und nicht im Repo, Sicherheits-Header |
 
 ## Grenzen und mögliche Verbesserungen

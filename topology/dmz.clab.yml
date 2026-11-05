@@ -30,8 +30,6 @@ topology:
         net.ipv4.icmp_echo_ignore_broadcasts: 1
         net.ipv4.icmp_ignore_bogus_error_responses: 1
         net.ipv4.tcp_syncookies: 1
-        net.ipv6.conf.all.disable_ipv6: 1
-        net.ipv6.conf.default.disable_ipv6: 1
 
     dmz:
       privileged: false
@@ -40,7 +38,7 @@ topology:
       security-opts:
         - no-new-privileges:true
       sysctls:
-        net.ipv4.ip_forward: 0
+        net.ipv4.conf.default.forwarding: 0
         net.ipv4.conf.all.accept_redirects: 0
         net.ipv4.conf.default.accept_redirects: 0
         net.ipv4.conf.all.secure_redirects: 0
@@ -52,8 +50,6 @@ topology:
         net.ipv4.icmp_echo_ignore_broadcasts: 1
         net.ipv4.icmp_ignore_bogus_error_responses: 1
         net.ipv4.tcp_syncookies: 1
-        net.ipv6.conf.all.disable_ipv6: 1
-        net.ipv6.conf.default.disable_ipv6: 1
 
     siem:
       privileged: false
@@ -160,6 +156,7 @@ topology:
         - ip addr add 10.10.10.9/30 dev eth4
         - ip addr add 10.10.10.13/30 dev eth5
         - ip route replace default via 10.10.0.1 dev eth1
+        - sh -c 'ip link set dev eth6 addrgenmode none; ip -6 addr flush dev eth6; true'
         - syslogd -R 10.10.30.10:5140
         - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
@@ -235,6 +232,7 @@ topology:
       exec:
         - ip addr add 10.10.10.14/30 dev eth1
         - ip route replace default via 10.10.10.13 dev eth1
+        - sh -c 'ip link set dev eth2 addrgenmode none; ip -6 addr flush dev eth2; true'
         - syslogd -R 10.10.30.10:5140
         - sh /etc/suricata/ids-start.sh
 

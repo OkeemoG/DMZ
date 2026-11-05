@@ -90,16 +90,20 @@ echo "   for comparison, privileged inet: mount ${r}"
 echo "== H-04 Kernel parameters (routers and DMZ servers)"
 sys() { x "$1" cat "/proc/sys/$2" 2>/dev/null; }
 for n in "${ROUTER[@]}" "${DMZ[@]}"; do
-  got="$(sys "$n" net/ipv4/conf/all/accept_redirects)$(sys "$n" net/ipv4/conf/eth1/accept_redirects)$(sys "$n" net/ipv4/conf/all/send_redirects)$(sys "$n" net/ipv4/conf/eth1/accept_source_route)$(sys "$n" net/ipv4/tcp_syncookies)$(sys "$n" net/ipv6/conf/all/disable_ipv6)$(sys "$n" net/ipv6/conf/eth1/disable_ipv6)"
-  result H-04 "$n no redirects, no source routing, SYN cookies, IPv6 off (also on eth1)" 0000111 "$got"
+  got="$(sys "$n" net/ipv4/conf/all/accept_redirects)$(sys "$n" net/ipv4/conf/eth1/accept_redirects)$(sys "$n" net/ipv4/conf/all/send_redirects)$(sys "$n" net/ipv4/conf/eth1/send_redirects)$(sys "$n" net/ipv4/conf/eth1/accept_source_route)$(sys "$n" net/ipv4/tcp_syncookies)"
+  result H-04 "$n no redirects in or out, no source routing, SYN cookies (all and eth1)" 000001 "$got"
 done
 for n in "${ROUTER[@]}"; do
   result H-04 "$n forwards packets" 1 "$(sys "$n" net/ipv4/ip_forward)"
 done
 for n in "${DMZ[@]}"; do
-  result H-04 "$n does not forward packets" 0 "$(sys "$n" net/ipv4/ip_forward)"
+  result H-04 "$n does not forward packets on eth1" 0 "$(sys "$n" net/ipv4/conf/eth1/forwarding)"
 done
-result H-04 "ids mirror port eth2 without IPv6" 1 "$(sys ids net/ipv6/conf/eth2/disable_ipv6)"
+result H-04 "ids mirror port eth2 without any address" "" "$(x ids ip -o addr show dev eth2 2>/dev/null)"
+result H-04 "fw-dmz mirror port eth6 without any address" "" "$(x fw-dmz ip -o addr show dev eth6 2>/dev/null)"
+for fw in fw-edge fw-dmz fw-backend; do
+  result H-04 "$fw filters IPv6 as well (inet tables, policy drop)" "yes yes" "$(has "$(x "$fw" nft list chain inet filter input 2>/dev/null)" 'policy drop') $(has "$(x "$fw" nft list chain inet filter forward 2>/dev/null)" 'policy drop')"
+done
 
 echo "== H-05 Firewalls only send what they must (output chain)"
 for fw in fw-edge fw-dmz fw-backend; do
@@ -161,10 +165,10 @@ done
 
 echo "== H-08 Proxy closes slow requests (Slowloris)"
 timing=$(docker exec -i "${P}-attacker" sh <<'SLOW'
+rm -f /tmp/slow.t1
 t0=$(cut -d' ' -f1 /proc/uptime)
-(printf 'GET / HTTP/1.1\r\nHost: 203.0.113.2\r\n'; sleep 20) | timeout 25 openssl s_client -quiet -connect 203.0.113.2:443 >/dev/null 2>&1
-t1=$(cut -d' ' -f1 /proc/uptime)
-echo "$t0 $t1"
+(printf 'GET / HTTP/1.1\r\nHost: 203.0.113.2\r\n'; sleep 12) | (timeout 15 openssl s_client -quiet -connect 203.0.113.2:443 >/dev/null 2>&1; cut -d' ' -f1 /proc/uptime > /tmp/slow.t1)
+echo "$t0 $(cat /tmp/slow.t1)"
 SLOW
 )
 read -r t0 t1 <<< "$timing"
