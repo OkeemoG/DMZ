@@ -1,6 +1,6 @@
 # Projektplan – DMZ-Laborumgebung
 
-Stand: 2026-11-04, Version 0.3.
+Stand: 2026-11-05, Version 0.4.
 
 ## Ergebnisse der Phase 1
 
@@ -17,13 +17,14 @@ Stand: 2026-11-04, Version 0.3.
 
 - Firewalls: nftables
 - Routing: Linux-Kernel mit statischen Routen, kein FRR
-- VPN: WireGuard als Client-VPN, zwei Clients, Endpunkt `fw-edge`
+- VPN: IKEv2/IPsec mit strongSwan nach BSI TR-02102-3, zwei Clients, Endpunkt `fw-edge`
 - Reverse-Proxy: Nginx
 - WAF: ModSecurity v3 mit OWASP CRS 4
 - Webanwendung: eigene Anwendung mit Python, Flask, SQLite
 - IDS: Suricata mit eigenen Regeln am Spiegelport
 - SIEM: Grafana und Loki, Sammler Fluent Bit, ein Container mit eigenem Image
 - Meldeweg: Syslog über UDP 5140, Firewall-Meldungen über NFLOG und ulogd2
+- Reaktion: Responder im SIEM, Sperren über SSH mit Forced Command an `fw-edge` (E-17, E-18)
 - Kein Namensdienst
 
 ## Ressourcenbudget
@@ -39,10 +40,10 @@ Schätzungen aus Phase 1, Grenzen und Messungen Stand 2026-11-04.
 | `waf` | 1 | 60–150 MB | 44 MB | 256 MB | 256 MB |
 | `web` | 1 | 30–80 MB | 28 MB | 128 MB | 128 MB |
 | `ids` | 1 | 150–350 MB | 34 MB | 256 MB | 256 MB |
-| `siem` mit drei Diensten | 4 | 250–500 MB | 410–450 MB | 64/64/256/512 MB | 896 MB |
-| Summe | 17 | 555–1255 MB | ca. 520 MB | | 2176 MB |
+| `siem` mit vier Diensten | 5 | 265–530 MB | 410–450 MB ohne Responder | 64/64/64/256/512 MB | 960 MB |
+| Summe | 18 | 570–1285 MB | ca. 520 MB ohne Responder | | 2240 MB |
 
-Verfügbar sind 3423 MB. Die Reserve für Debian, Docker und den Bau der Images beträgt 1247 MB. Gemessen am 2026-11-04: 2598 MB verfügbar, kein Swap. Die Grenzen werden in der Topologie je Knoten gesetzt und wirken (`docker stats`).
+Verfügbar sind 3423 MB. Die Reserve für Debian, Docker und den Bau der Images beträgt 1183 MB. Gemessen am 2026-11-04: 2598 MB verfügbar, kein Swap. Die Grenzen werden in der Topologie je Knoten gesetzt und wirken (`docker stats`).
 
 ### Disk
 
@@ -70,6 +71,7 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 | 3 Sicherheitssysteme | Firewalls nach Matrix 0.3, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4), in Arbeit. |
 | 4 Logging und SIEM | Erledigt. Fluent Bit, Loki und Grafana in drei Containern (E-09), alle vier Sensoren melden in unter 1 s (E-10, E-11), Normalisierung (E-14), Zugang über Out-of-Band-Netz (E-15), Dashboard „SOC – DMZ“ (E-16). Test `test-siem`. |
 | 5 bis 8 | Offen. Grundlagen für die Angriffe liegen vor: verwundbare Webanwendung, WAF und IDS mit Erkennung. |
+| 6 Reaktion (Stand 2026-11-05) | Umgesetzt, in der VM zu testen: Responder mit Playbooks P-1 bis P-5, Sperren und Quarantäne an `fw-edge`, Kanal K-13, Anti-Spoofing, Beweissicherung, Wiederherstellung, Dashboard, Test `test-response`, A-1 bis A-3 mit Reaktion (`docs/reaktion.md`). |
 
 Alle Tests laufen mit `make test-all` (Ablauf siehe `README.md`).
 
@@ -124,20 +126,21 @@ DMZ/
 └── docs/              # Aufgabenstellung, Planung, Netzpläne
 ```
 
-Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `configs/fw` (ulogd2) dazu. Geplant: `attacks/`.
+Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `configs/fw` (ulogd2) dazu, seit Phase 6 `attacks/`, `configs/response` (Playbooks, `fw-response`, `sshd`) und `images/responder`.
 
 ## Abgleich mit den Bewertungskriterien
 
-| Kriterium | Stand am 2026-11-04 |
+| Kriterium | Stand am 2026-11-05 |
 |---|---|
-| Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver sowie SIEM im Backend umgesetzt und getestet. Offen: VPN. |
-| Drei Angriffe, hoher Schwierigkeitsgrad | Nicht entworfen. Phase 6. |
+| Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver sowie SIEM im Backend umgesetzt und getestet. VPN mit strongSwan umgesetzt (`test-vpn`). |
+| Drei Angriffe, hoher Schwierigkeitsgrad | A-1 bis A-3 in `attacks/`, A-3 aus dem Client-Netz. |
+| Proaktive, detektierende und reaktive Maßnahmen | Reaktion umgesetzt: automatische Sperre, Quarantäne, Sperre von C2-Zielen, Beweissicherung, Wiederherstellung (`docs/reaktion.md`). Test in der VM offen. |
 | Anzeige innerhalb von 1 s | Erfüllt: Transport bis Loki 50 bis 650 ms, Dashboard mit 1 s Aktualisierung, Live-Ansicht ohne Abfrage-Intervall (E-16). |
 | Stabilität in der Demo | Alle Tests bestanden. Speichergrenzen gesetzt. Bekannt: Suricata ohne Überwachung. |
 | Methodenkompetenz | Phasenmodell, IDs für Anforderungen, Verbindungen und Tests, Entscheidungen mit Alternativen. |
-| Design | Netzplan, Adressplan 0.3, Matrix 0.3 und Entscheidungen 0.3 passen zur Umsetzung. |
+| Design | Netzplan, Adressplan 0.3, Matrix 0.4 und Entscheidungen 0.4 passen zur Umsetzung. Netzplan um `siem-responder` und K-13 ergänzen. |
 | Installation | `install.sh` mit fester Containerlab-Version, README mit Anleitung und Fehlerquellen. Wiederholungsnachweis auf frischer VM fehlt. |
-| Nachweise | Acht Testskripte, `make test-all`, Latenzmessung in `test-siem`. Protokolle der Testläufe für die Dokumentation sichern. |
+| Nachweise | Elf Testskripte, `make test-all`, Latenzmessung in `test-siem`, Reaktionszeit in `test-response`. Protokolle der Testläufe für die Dokumentation sichern. |
 | Dokumentation | Nicht begonnen. Ein Diagramm der Datenflüsse fehlt. |
 
 ## Offene Punkte
@@ -150,11 +153,12 @@ Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `c
 | 4 | Ziele des VPN-Clients über die Webanwendung hinaus (K-08) | Offen, mit dem VPN. |
 | 5 | Anzeige innerhalb von 1 s, Grafana mit Loki ausreichend | Erledigt (R-01, E-16). |
 | 6 | Zugriff auf das Dashboard (K-12) | Erledigt: Management-Netz nur für `siem`, Port 3000 auf der VM (E-15). Zugriff im Labor der DHBW noch prüfen. |
-| 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Offen, Phase 6. |
-| 8 | Drei Angriffe und Werkzeuge des Angreifers | Offen, Phase 6. |
+| 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Umgesetzt (E-17 bis E-20). Messung: RE-03 misst die Zeit vom dritten geblockten Angriff bis zur wirksamen Sperre, Ziel unter 1 s. Lauf in der VM offen. |
+| 8 | Drei Angriffe und Werkzeuge des Angreifers | Umgesetzt: A-1 bis A-3 mit curl, socat und openssl aus dem Image `client`. |
 | 9 | Diagramm der Datenflüsse (DOC-03) | Offen, Phase 7. |
 | 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Version 0.82.0 festgeschrieben (E-13). Wiederholungsnachweis offen. |
 | 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7. |
 | 12 | IDS sieht durchgelassene Anfragen doppelt | Bekannt. Ein Alarm von 10.10.10.6 → 10.10.10.10 zeigt, dass ein Angriff die WAF passiert hat. Für die Demo nutzbar. |
 | 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Offen (E-08, R-05). Alarme gehen inzwischen ans SIEM, `eve.json` dient nur noch dem Test. |
 | 14 | Bau der Images über VPN bricht ab | Hinweis im README, vor dem Labortermin Images bauen (R-06). |
+| 15 | Nach dem VPN-Merge fehlten auf `fw-edge` das Bind für `ulogd.conf` und die Log-Regel der Input-Kette. `fw-edge` meldete keine verworfenen Pakete. | Behoben im Branch `response`. S-05 prüft es wieder. |

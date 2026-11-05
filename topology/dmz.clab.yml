@@ -66,6 +66,12 @@ topology:
       image: fw:0.1
       binds:
         - ../configs/fw-edge/nftables.nft:/etc/nftables.nft:ro
+        - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
+        - ../configs/response/fw-response.sh:/etc/response/fw-response:ro
+        - ../configs/response/sshd_config:/etc/response/sshd_config:ro
+        - ../configs/response/sshd-start.sh:/etc/response/sshd-start.sh:ro
+        - ../configs/response/keys/fw-edge_host.key:/etc/response/keys/fw-edge_host.key:ro
+        - ../configs/response/keys/authorized_keys:/etc/response/keys/authorized_keys:ro
         - ../configs/vpn/fw-edge.conf:/etc/swanctl/swanctl.conf:ro
         - ../configs/vpn/strongswan-lab.conf:/etc/strongswan.d/lab.conf:ro
         - ../configs/vpn/vpn-start.sh:/etc/swanctl/vpn-start.sh:ro
@@ -86,6 +92,7 @@ topology:
         - syslogd -R 10.10.30.10:5140
         - ulogd -d -c /etc/ulogd-dmz.conf
         - nft -f /etc/nftables.nft
+        - sh /etc/response/sshd-start.sh
         - sh /etc/swanctl/vpn-start.sh
 
     #DMZ 
@@ -227,6 +234,23 @@ topology:
       cmd: -c /fluent-bit/etc/dmz.yaml
       binds:
         - ../configs/siem/fluent-bit.yaml:/fluent-bit/etc/dmz.yaml:ro
+      stages:
+        create:
+          wait-for:
+            - node: siem
+              stage: create
+
+    siem-responder:
+      kind: linux
+      image: responder:0.1
+      network-mode: container:siem
+      memory: 64MB
+      env:
+        RESPONDER_MODE: ${RESPONDER_MODE:=enforce}
+      binds:
+        - ../configs/response/playbook.json:/etc/responder/playbook.json:ro
+        - ../configs/response/keys/responder.key:/etc/responder/keys/responder.key:ro
+        - ../configs/response/keys/known_hosts:/etc/responder/keys/known_hosts:ro
       stages:
         create:
           wait-for:

@@ -1,0 +1,30 @@
+{
+  "mode": "enforce",
+  "listen": "127.0.0.1:5170",
+  "syslog": "127.0.0.1:5140",
+  "firewall": {
+    "host": "10.10.0.9",
+    "user": "root",
+    "key": "/home/responder/.ssh/id",
+    "known_hosts": "/home/responder/.ssh/known_hosts"
+  },
+  "waf": "10.10.10.6",
+  "web": "10.10.10.10",
+  "protected": ["10.10.0.0/24", "10.10.10.0/24", "10.10.30.0/24", "127.0.0.0/8", "198.51.100.2/32", "198.51.100.6/32", "203.0.113.0/30"],
+  "internal": ["10.10.20.0/24", "10.99.0.0/24"],
+  "dmz": ["10.10.10.0/24"],
+  "private": ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8"],
+  "block_seconds": 600,
+  "max_block_seconds": 86400,
+  "escalation": 2,
+  "offense_memory_seconds": 86400,
+  "quarantine_seconds": 0,
+  "max_actions_per_minute": 30,
+  "playbooks": [
+    {"id": "P-1", "name": "Wiederholte Web-Angriffe", "trigger": "waf_block", "threshold": 3, "window": 60, "distinct": false, "action": "block"},
+    {"id": "P-2", "name": "Angriff hinter der WAF", "trigger": "ids_behind_waf", "threshold": 1, "window": 60, "distinct": false, "action": "block"},
+    {"id": "P-3", "name": "Portscan", "trigger": "fw_drop_external", "threshold": 10, "window": 20, "distinct": true, "action": "block"},
+    {"id": "P-4", "name": "Seitwärtsbewegung aus dem Firmennetz", "trigger": "fw_drop_internal", "threshold": 3, "window": 60, "distinct": true, "action": "quarantine"},
+    {"id": "P-5", "name": "Verbindung zu Command-and-Control", "trigger": "ids_egress", "threshold": 1, "window": 60, "distinct": false, "action": "block"}
+  ]
+}

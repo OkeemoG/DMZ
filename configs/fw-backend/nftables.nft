@@ -19,6 +19,7 @@ table inet filter {
         ct state invalid drop
 
         iifname "eth1" oifname "eth2" ip saddr { 10.10.10.6, 10.10.10.14, 10.10.0.2, 10.10.0.9 } ip daddr 10.10.30.10 udp dport 5140 accept comment "K-09, K-10, K-11 Meldungen -> siem"
+        iifname "eth2" oifname "eth1" ip saddr 10.10.30.10 ip daddr 10.10.0.9 tcp dport 22 accept comment "K-13 Reaktion siem -> fw-edge"
 
         counter comment "verworfen"
     }

@@ -9,6 +9,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 RUN="v$(date +%s)$$"
 PKI="$(cd "$(dirname "$0")/.." && pwd)/configs/vpn/pki"
 fail=0

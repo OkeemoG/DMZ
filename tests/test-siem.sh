@@ -2,6 +2,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 SAMPLES="${SAMPLES:-10}"
 LIMIT_MS="${LIMIT_MS:-1000}"
 PASS="${GRAFANA_PASSWORD:-dmz-soc}"

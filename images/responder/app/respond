@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+import json
+import os
+import re
+import socket
+import sys
+import time
+
+CONTROL_PATH = os.environ.get("RESPONDER_CONTROL", "/run/responder/ctl.sock")
+
+USAGE = """usage: respond COMMAND [ARGS]
+  status                          mode, firewall channel, active blocks, counters
+  mode [enforce|monitor]          show or set the mode (monitor = detect and log only)
+  block IP [SECONDS] [REASON]     block an address at fw-edge
+  quarantine IP [SECONDS] [REASON] isolate an internal host (0 = until released)
+  release IP                      lift a block or quarantine
+  flush                           lift all blocks and quarantines
+  reset                           forget detection windows and repeat offenders
+  list                            blocks and quarantines as fw-edge reports them
+  sync                            reload the state from fw-edge
+  stats                           packets dropped by blocks, quarantine, anti-spoofing
+  history [N]                     last N actions as JSON lines
+  export                          active entries as replayable lines: KIND IP SECONDS REASON"""
+
+
+def request(req):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(15)
+    s.connect(CONTROL_PATH)
+    s.sendall((json.dumps(req) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(65536)
+        if not chunk:
+            break
+        buf += chunk
+    s.close()
+    return json.loads(buf)
+
+
+UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def export_lines(lines):
+    out = []
+    for line in lines:
+        m = re.match(r"^(blocklist|quarantine) (\S+)(.*)$", line)
+        if not m:
+            continue
+        rest = m.group(3)
+        expires = re.search(r"expires (\S+)", rest)
+        comment = re.search(r'comment "([^"]*)"', rest)
+        seconds = int(sum(int(v) * UNITS[u] for v, u in re.findall(r"(\d+)(ms|d|h|m|s)", expires.group(1)))) if expires else 0
+        kind = "block" if m.group(1) == "blocklist" else "quarantine"
+        if kind == "block" and seconds < 1:
+            continue
+        out.append(f"{kind} {m.group(2)} {seconds} {comment.group(1) if comment else 'operator'}")
+    return out
+
+
+def show_status(res):
+    print(f"mode:     {res['mode']}")
+    print(f"channel:  {'up' if res['channel'] else 'down'} (fw-edge {res['firewall']})")
+    print(f"active:   {len(res['active'])}")
+    for e in res["active"]:
+        left = "until released" if e["expires_in"] is None else f"expires in {e['expires_in']} s"
+        print(f"  {e['set']:<10} {e['ip']:<15} {left:<20} reason {e['reason']}")
+    if res["offenses"]:
+        print("repeat:   " + ", ".join(f"{ip}={n}" for ip, n in sorted(res["offenses"].items())))
+    c = res["counters"]
+    print(f"events:   {c.get('events', 0)}  signals: {c.get('signals', 0)}  actions: {c.get('actions', 0)}  errors: {c.get('errors', 0)}")
+    print("playbooks:")
+    for p in res["playbooks"]:
+        print(f"  {p}")
+
+
+def build(argv):
+    cmd, args = argv[0], argv[1:]
+    req = {"cmd": cmd}
+    if cmd == "mode" and args:
+        req["value"] = args[0]
+    elif cmd in ("block", "quarantine"):
+        if not args:
+            return None
+        req["ip"] = args[0]
+        if len(args) > 1:
+            req["seconds"] = args[1]
+        if len(args) > 2:
+            req["reason"] = args[2]
+    elif cmd == "release":
+        if not args:
+            return None
+        req["ip"] = args[0]
+    elif cmd == "history" and args:
+        req["n"] = args[0]
+    elif cmd == "export":
+        req["cmd"] = "list"
+        req["export"] = True
+    return req
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(USAGE)
+        return 0 if argv else 2
+    req = build(argv)
+    if req is None:
+        print(USAGE, file=sys.stderr)
+        return 2
+    try:
+        res = request(req)
+    except OSError as exc:
+        print(f"responder not reachable: {exc}", file=sys.stderr)
+        return 3
+    if not res.get("ok"):
+        print(res.get("error") or res.get("message") or "failed", file=sys.stderr)
+        return 1
+    cmd = req["cmd"]
+    if req.get("export"):
+        for line in export_lines(res.get("lines", [])):
+            print(line)
+    elif cmd == "status":
+        show_status(res)
+    elif cmd == "mode":
+        print(res["mode"])
+    elif cmd in ("list", "sync"):
+        for line in res.get("lines", []):
+            print(line)
+    elif cmd == "history":
+        for h in res["history"]:
+            stamp = time.strftime("%H:%M:%S", time.localtime(h.get("ts", 0)))
+            print(stamp, json.dumps(h, ensure_ascii=False, separators=(",", ":")))
+    else:
+        print(res.get("message", "OK"))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -8,7 +8,7 @@
   "timezone": "browser",
   "editable": false,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1s",
   "graphTooltip": 1,
   "time": {
@@ -284,6 +284,361 @@
       "id": 4
     },
     {
+      "id": 13,
+      "type": "stat",
+      "title": "Reaktion: Modus",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "Aktiv: sperrt automatisch",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Beobachtung: meldet nur",
+                  "color": "orange",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "Responder meldet nicht",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", enforce=\"enforce\" | action=\"state\" | drop action | unwrap enforce [15s]))",
+          "queryType": "range"
+        }
+      ],
+      "description": "Responder im SIEM (Playbooks P-1 bis P-5). Herzschlag alle 5 s."
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Gesperrte Adressen (fw-edge)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 5,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "0",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", blocks=\"blocks\" | action=\"state\" | drop action | unwrap blocks [15s]))",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Isolierte interne Hosts",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 10,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          },
+          "noValue": "0",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", quarantined=\"quarantined\" | action=\"state\" | drop action | unwrap quarantined [15s]))",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Kanal zu fw-edge",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 15,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "verbunden",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            },
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "getrennt",
+                  "color": "red",
+                  "index": 0
+                }
+              }
+            }
+          ],
+          "noValue": "unbekannt",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", channel=\"channel\" | action=\"state\" | drop action | unwrap channel [15s]))",
+          "queryType": "range"
+        }
+      ],
+      "description": "SSH mit Forced Command, K-13"
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Letzte Reaktionszeit",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 19,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "unit": "ms",
+          "noValue": "–",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value",
+        "justifyMode": "center",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", latency_ms=\"latency_ms\" | action=~\"block|quarantine\" | latency_ms!=\"\" | drop action | unwrap latency_ms [$__range]))",
+          "queryType": "range"
+        }
+      ],
+      "description": "Vom Eintreffen des auslösenden Ereignisses im SIEM bis zur bestätigten Sperre auf fw-edge"
+    },
+    {
       "type": "logs",
       "title": "Alarm-Stream (neueste oben)",
       "datasource": {
@@ -294,7 +649,7 @@
         "h": 12,
         "w": 15,
         "x": 0,
-        "y": 4
+        "y": 8
       },
       "targets": [
         {
@@ -327,10 +682,10 @@
         "uid": "loki"
       },
       "gridPos": {
-        "h": 12,
+        "h": 6,
         "w": 9,
         "x": 15,
-        "y": 4
+        "y": 8
       },
       "targets": [
         {
@@ -373,6 +728,42 @@
       "id": 6
     },
     {
+      "id": 18,
+      "type": "logs",
+      "title": "Reaktionen (neueste oben)",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 9,
+        "x": 15,
+        "y": 14
+      },
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "queryType": "range",
+          "expr": "{job=\"dmz\", ident=\"responder\"} | json | action!=\"state\" | line_format `{{ .action | ToUpper }}  {{ .client }}{{ if .playbook }}  {{ .playbook }}{{ end }}{{ if .name }} {{ .name }}{{ end }}{{ if eq .seconds \"0\" }}  bis Freigabe{{ else if .seconds }}  {{ .seconds }} s{{ end }}{{ if .latency_ms }}  Reaktion {{ .latency_ms }} ms{{ end }}{{ if .result }}  {{ .result }}{{ end }}`"
+        }
+      ]
+    },
+    {
       "type": "timeseries",
       "title": "Ereignisse pro Sensor",
       "datasource": {
@@ -383,7 +774,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 20
       },
       "targets": [
         {
@@ -437,7 +828,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 16
+        "y": 20
       },
       "targets": [
         {
@@ -490,7 +881,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 16
+        "y": 20
       },
       "targets": [
         {
@@ -543,7 +934,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 24
+        "y": 28
       },
       "targets": [
         {
@@ -596,7 +987,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 24
+        "y": 28
       },
       "targets": [
         {
@@ -649,7 +1040,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 24
+        "y": 28
       },
       "targets": [
         {
@@ -691,5 +1082,26 @@
       },
       "id": 12
     }
-  ]
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Reaktionen",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "enable": true,
+        "iconColor": "red",
+        "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|release\"",
+        "target": {
+          "refId": "Anno",
+          "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|release\""
+        },
+        "titleFormat": "Reaktion",
+        "textFormat": "{{action}} {{client}} {{playbook}}",
+        "tagKeys": "action,playbook"
+      }
+    ]
+  }
 }

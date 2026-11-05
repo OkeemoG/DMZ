@@ -2,6 +2,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 EXT="https://203.0.113.2"
 INT="https://10.10.10.2"
 RUN="w$(date +%s)$$"

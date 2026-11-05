@@ -7,7 +7,7 @@ Stand: 2026-11-04, Version 0.3 (passend zu `DMZ_Netzplan_0.2.drawio` und `topolo
 - Das Gateway erhält die erste Adresse des Subnetzes. Hosts beginnen bei `.10`.
 - Das dritte Oktett kennzeichnet die Zone: 0 Transit, 10 DMZ, 20 Client, 30 Backend.
 - Die Knoten laufen ohne Management-Netz (`network-mode: none`) und haben kein `eth0`. Eigene Links beginnen bei `eth1`. Jeder Verkehr läuft über den Datenpfad und damit durch die Firewalls (Test T-01, T-03d).
-- Einzige Ausnahme ist `siem`: Es hat ein `eth0` im Management-Netz von Containerlab, damit der Operator Grafana erreicht (K-12). Die drei SIEM-Dienste `siem-collector`, `siem-loki` und `siem-grafana` teilen sich das Netz von `siem` und damit die Adresse 10.10.30.10.
+- Einzige Ausnahme ist `siem`: Es hat ein `eth0` im Management-Netz von Containerlab, damit der Operator Grafana erreicht (K-12). Die vier SIEM-Dienste `siem-collector`, `siem-loki`, `siem-grafana` und `siem-responder` teilen sich das Netz von `siem` und damit die Adresse 10.10.30.10.
 - Jeder Link verbindet genau zwei Knoten .
 - Die Internet-Adressen stammen aus den Dokumentationsbereichen nach RFC 5737.
 

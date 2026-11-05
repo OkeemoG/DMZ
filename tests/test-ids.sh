@@ -9,6 +9,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 EVE=/var/log/suricata/eve.json
 M="t$$"
 fail=0
