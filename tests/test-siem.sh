@@ -6,7 +6,7 @@ P="clab-dmz"
 response_suspend
 SAMPLES="${SAMPLES:-10}"
 LIMIT_MS="${LIMIT_MS:-1000}"
-PASS="${GRAFANA_PASSWORD:-dmz-soc}"
+PASS="${GRAFANA_PASSWORD:-$(sed -n 's/^GF_SECURITY_ADMIN_PASSWORD=//p' "$(dirname "$0")/../configs/siem/secrets/grafana.env" 2>/dev/null)}"
 RUN="s$(date +%s)$$"
 fail=0
 

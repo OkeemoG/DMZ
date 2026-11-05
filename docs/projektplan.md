@@ -70,7 +70,8 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 | 2 Grundaufbau | Erledigt. 14 Knoten ohne Management-Netz, Adressen und Routen nach Adressplan (T-01 bis T-03), Rechte im Container (R-03). |
 | 3 Sicherheitssysteme | Firewalls nach Matrix 0.3, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4), in Arbeit. |
 | 4 Logging und SIEM | Erledigt. Fluent Bit, Loki und Grafana in drei Containern (E-09), alle vier Sensoren melden in unter 1 s (E-10, E-11), Normalisierung (E-14), Zugang über Out-of-Band-Netz (E-15), Dashboard „SOC – DMZ“ (E-16). Test `test-siem`. |
-| 5 bis 8 | Offen. Grundlagen für die Angriffe liegen vor: verwundbare Webanwendung, WAF und IDS mit Erkennung. |
+| 5 Härtung (Stand 2026-11-05) | Umgesetzt, Test in der VM offen: Container ohne Privilegien, minimale Rechte, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Watchdog und Logbegrenzung, Proxy-Zeitlimits, Grafana-Passwort, Docker-Loglimits (`docs/haertung.md`, E-21, `test-hardening`). |
+| 7 bis 8 | Offen: schriftliche Dokumentation, Ablaufplan der Live-Demo. |
 | 6 Reaktion (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Responder mit Playbooks P-1 bis P-5, Sperren und Quarantäne an `fw-edge`, Kanal K-13, Anti-Spoofing, Beweissicherung, Wiederherstellung, Dashboard, Test `test-response`, A-1 bis A-3 mit Reaktion (`docs/reaktion.md`). |
 
 Alle Tests laufen mit `make test-all` (Ablauf siehe `README.md`).
@@ -159,7 +160,7 @@ Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `c
 | 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Version 0.82.0 festgeschrieben (E-13). Wiederholungsnachweis offen. |
 | 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7. |
 | 12 | IDS sieht durchgelassene Anfragen doppelt | Bekannt. Ein Alarm von 10.10.10.6 → 10.10.10.10 zeigt, dass ein Angriff die WAF passiert hat. Für die Demo nutzbar. |
-| 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Offen (E-08, R-05). Alarme gehen inzwischen ans SIEM, `eve.json` dient nur noch dem Test. |
+| 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Erledigt in Phase 5: Watchdog mit Neustart und Meldung, Logdateien höchstens 50 MB (H-06). |
 | 14 | Bau der Images über VPN bricht ab | Hinweis im README, vor dem Labortermin Images bauen (R-06). |
 | 15 | Nach dem VPN-Merge fehlten auf `fw-edge` das Bind für `ulogd.conf` und die Log-Regel der Input-Kette. `fw-edge` meldete keine verworfenen Pakete. | Behoben im Branch `response`. S-05 prüft es wieder. |
 | 16 | Beim Neubau des Images `fw` kam eine neuere ulogd-Version mit anderem Zeilenformat (`drop:  IN=`, `MARK=0x0`). Suricata 8 schreibt `xff` bei Alarmen in `alert`. Beides hat die Zerlegung im Collector gebrochen. | Behoben im Branch `response` (E-14). Gegen die echten Zeilen mit Fluent Bit 5.1.5 geprüft. |

@@ -10,6 +10,7 @@ Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 - Kein DNS nur IP-Adressen
 - Reaktive Sperren und Quarantäne (`docs/reaktion.md`) gehen jeder Zeile vor: `fw-edge` verwirft Verkehr von und zu gesperrten Adressen vor allen anderen Regeln.
 - Anti-Spoofing auf `fw-edge`: Jede Schnittstelle nimmt nur Absender aus ihrem Netz an, das Internet keine internen oder reservierten Adressen außer im VPN-Tunnel.
+- Die Firewalls selbst senden nur, was die Tabelle verlangt: Meldungen an das SIEM (K-10, K-11), IKE und ESP an die VPN-Gegenstellen (K-07), Antworten und ICMP Echo zur Diagnose. Alles andere verwirft die Kette `output` (`docs/haertung.md`, H-05).
 
 ## Erlaubte Verbindungen
 

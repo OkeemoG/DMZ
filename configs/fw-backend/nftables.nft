@@ -25,6 +25,11 @@ table inet filter {
     }
 
     chain output {
-        type filter hook output priority filter; policy accept;
+        type filter hook output priority filter; policy drop;
+        oif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request accept comment "Diagnose"
+        counter comment "verworfen"
     }
 }

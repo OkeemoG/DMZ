@@ -118,7 +118,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** Fluent Bit nimmt die Meldungen an, Loki speichert und durchsucht sie, Grafana zeigt das Dashboard. Jeder Dienst läuft in einem eigenen Container mit unverändertem offiziellem Image. Alle drei teilen sich das Netz des Knotens `siem` (`network-mode: container:siem`), wie die Container eines Pods in Kubernetes. `siem` selbst hält nur Adressen und Routen.
 - **Begründung:** Passt in das Speicherbudget. Der Wazuh-Indexer verlangt mindestens 4 GB RAM und scheidet damit aus. Elasticsearch und Graylog liegen in derselben Größenordnung. Getrennte Container erlauben eine Speichergrenze je Dienst und brauchen keine Prozessverwaltung. Adressplan und Firewall-Regeln bleiben unverändert, weil alle Dienste unter 10.10.30.10 erreichbar sind und sich über `localhost` ansprechen.
 - **Abweichung vom Entwurf:** Das gemeinsame Image `lab-siem` entfällt, damit auch Risiko R-02.
-- **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, Admin-Passwort über `GRAFANA_PASSWORD`, ohne Verbindungen ins Internet.
+- **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, ohne Verbindungen ins Internet. Seit Phase 5 mit erzeugtem Admin-Passwort und weiteren Maßnahmen (E-21, `docs/haertung.md`).
 - **Grenze:** Grafana mit Loki ist eine Log-Plattform mit Abfragen und Dashboards, kein vollständiges SIEM. Es fehlen fertige Korrelationsregeln und Fallbearbeitung. Die Korrelation über das Feld `client` (E-14) ist ein einfacher Ersatz. Die Grenze gehört in das Fazit der Dokumentation.
 - **Anforderungen:** SYS-07, MON-02, MON-03, MON-05.
 
@@ -203,6 +203,14 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** `scripts/collect-evidence.sh` (`make evidence`) sichert Ereignisse, Zustände, Logs und Container-Änderungen mit Prüfsummen. `scripts/recover.sh` (`make recover`) sichert Beweise, setzt alle Systeme aus den Images neu auf und trägt die Sperren wieder ein.
 - **Begründung:** Die Vorlesung verlangt nach der Eindämmung Beweissicherung und die Wiederherstellung des sicheren Betriebs nach festgelegten Abläufen. Skripte machen den Ablauf wiederholbar und verhindern, dass Beweise beim Neuaufbau verloren gehen.
 
+### E-21 Härtung nach dem Prinzip der minimalen Rechte
+
+- **Entscheidung:** Firewalls, Router, DMZ-Server und SIEM-Dienste laufen nicht mehr privilegiert, sondern mit genau den nötigen Zusatzrechten (`NET_ADMIN`, beim IDS `NET_RAW`) und `no-new-privileges`, gebündelt über die Gruppen `router`, `dmz` und `siem` in der Topologie. Dazu Kernel-Einstellungen gegen Redirects und Source-Routing, IPv6 aus, Output-Ketten mit `policy drop` auf den Firewalls, Watchdog und Logbegrenzung für Suricata, Zeitlimits im Proxy, erzeugtes Grafana-Passwort, Docker-Loglimits auf dem Host. Einzelheiten und Tests: `docs/haertung.md`.
+- **Begründung:** Containerlab startet Knoten standardmäßig privilegiert. Damit wäre jede Codeausführung in einem DMZ-Server ein Zugriff auf den Host. Minimale Rechte begrenzen den Schaden eines erfolgreichen Angriffs (Defense in Depth hinter WAF und Firewall).
+- **Alternativen:** Schreibgeschütztes Dateisystem und `cap-drop` (von Containerlab nicht angeboten). Adressen von außen über einen Hilfscontainer setzen, damit die DMZ-Server ohne `NET_ADMIN` auskommen (Containerlab sieht das nicht vor, Ablauf würde unübersichtlich). User-Namespace-Remapping für Docker (Umstellung des Hosts).
+- **Geprüft:** `make test-hardening`, H-01 bis H-09. Vorab: Regelwerke mit nftables, Proxy-Konfiguration und Slowloris mit Nginx 1.28.
+- **Anforderungen:** Aufgabenstellung „gehärtet … Wirksamkeit überprüft“, Phase 5. Eine ID in der Anforderungsliste nachtragen.
+
 ## Risiken und Prüfungen
 
 | Nr. | Risiko | Prüfung |
@@ -211,7 +219,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 | R-02 | Das gemeinsame Image `lab-siem` mit drei Diensten lässt sich nicht sauber bauen. | Entfällt: drei Container mit offiziellen Images (E-09). |
 | R-03 | nftables, tc und WireGuard brauchen erweiterte Rechte im Container. | Erledigt: Test R-03 in `test-topology` bestanden. |
 | R-04 | Suricata belegt mehr RAM als geschätzt. | Erledigt: gemessen 37 MB, Grenze auf 256 MB gesenkt. |
-| R-05 | Logs füllen die Disk. | Loki speichert 24 h. Offen: `eve.json` und Container-Logs begrenzen. |
+| R-05 | Logs füllen die Disk. | Loki speichert 24 h. Suricata-Logs über 50 MB werden geleert (H-06), Docker-Logs je Container höchstens 3 × 10 MB (H-07). |
 | R-06 | Der Bau der Images bricht über ein VPN ab (`I/O error` bei `apk`), weil das VPN die MTU verkleinert. | Images ohne VPN bauen oder die MTU von Docker anpassen. Vor dem Labortermin alle Images bauen. Hinweis im README. |
 | R-07 | Grafana erreicht seine Speichergrenze und wird vom Kernel beendet. | Gemessen bis 349 MB, Grenze von 384 auf 512 MB erhöht. Test S-00 prüft auf Abbruch wegen Speichermangel. |
 | R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. Das Image `responder` teilt die Basis mit `web`. |

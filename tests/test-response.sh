@@ -2,7 +2,7 @@
 set -uo pipefail
 
 P="clab-dmz"
-PASS="${GRAFANA_PASSWORD:-dmz-soc}"
+PASS="${GRAFANA_PASSWORD:-$(sed -n 's/^GF_SECURITY_ADMIN_PASSWORD=//p' "$(dirname "$0")/../configs/siem/secrets/grafana.env" 2>/dev/null)}"
 LIMIT_MS="${LIMIT_MS:-1000}"
 RUN="r$(date +%s)$$"
 fail=0

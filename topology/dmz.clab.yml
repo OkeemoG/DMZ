@@ -9,6 +9,57 @@ topology:
       memory: 64MB
       network-mode: none
 
+  groups:
+    router:
+      privileged: false
+      cap-add:
+        - NET_ADMIN
+        - NET_RAW
+      security-opts:
+        - no-new-privileges:true
+      sysctls:
+        net.ipv4.ip_forward: 1
+        net.ipv4.conf.all.accept_redirects: 0
+        net.ipv4.conf.default.accept_redirects: 0
+        net.ipv4.conf.all.secure_redirects: 0
+        net.ipv4.conf.default.secure_redirects: 0
+        net.ipv4.conf.all.send_redirects: 0
+        net.ipv4.conf.default.send_redirects: 0
+        net.ipv4.conf.all.accept_source_route: 0
+        net.ipv4.conf.default.accept_source_route: 0
+        net.ipv4.icmp_echo_ignore_broadcasts: 1
+        net.ipv4.icmp_ignore_bogus_error_responses: 1
+        net.ipv4.tcp_syncookies: 1
+        net.ipv6.conf.all.disable_ipv6: 1
+        net.ipv6.conf.default.disable_ipv6: 1
+
+    dmz:
+      privileged: false
+      cap-add:
+        - NET_ADMIN
+      security-opts:
+        - no-new-privileges:true
+      sysctls:
+        net.ipv4.ip_forward: 0
+        net.ipv4.conf.all.accept_redirects: 0
+        net.ipv4.conf.default.accept_redirects: 0
+        net.ipv4.conf.all.secure_redirects: 0
+        net.ipv4.conf.default.secure_redirects: 0
+        net.ipv4.conf.all.send_redirects: 0
+        net.ipv4.conf.default.send_redirects: 0
+        net.ipv4.conf.all.accept_source_route: 0
+        net.ipv4.conf.default.accept_source_route: 0
+        net.ipv4.icmp_echo_ignore_broadcasts: 1
+        net.ipv4.icmp_ignore_bogus_error_responses: 1
+        net.ipv4.tcp_syncookies: 1
+        net.ipv6.conf.all.disable_ipv6: 1
+        net.ipv6.conf.default.disable_ipv6: 1
+
+    siem:
+      privileged: false
+      security-opts:
+        - no-new-privileges:true
+
   nodes:
     #Internet und Remote Office
     inet:
@@ -63,6 +114,7 @@ topology:
     #Edge-Firewall
     fw-edge:
       kind: linux
+      group: router
       image: fw:0.1
       binds:
         - ../configs/fw-edge/nftables.nft:/etc/nftables.nft:ro
@@ -78,8 +130,6 @@ topology:
         - ../configs/vpn/pki/ca.crt:/etc/swanctl/x509ca/ca.crt:ro
         - ../configs/vpn/pki/fw-edge.crt:/etc/swanctl/x509/fw-edge.crt:ro
         - ../configs/vpn/pki/fw-edge.key:/etc/swanctl/private/fw-edge.key:ro
-      sysctls:
-        net.ipv4.ip_forward: 1
       exec:
         - ip addr add 203.0.113.2/30 dev eth1
         - ip addr add 10.10.0.1/30 dev eth2
@@ -98,20 +148,17 @@ topology:
     #DMZ 
     fw-dmz:
       kind: linux
+      group: router
       image: fw:0.1
       binds:
         - ../configs/fw-dmz/nftables.nft:/etc/nftables.nft:ro
         - ../configs/fw/ulogd.conf:/etc/ulogd-dmz.conf:ro
-      sysctls:
-        net.ipv4.ip_forward: 1
       exec:
         - ip addr add 10.10.0.2/30 dev eth1
         - ip addr add 10.10.10.1/30 dev eth2
         - ip addr add 10.10.10.5/30 dev eth3
         - ip addr add 10.10.10.9/30 dev eth4
         - ip addr add 10.10.10.13/30 dev eth5
-        # eth6: Spiegelausgang zum IDS, ohne Adresse (V-11)
-        - sysctl -w net.ipv6.conf.eth6.disable_ipv6=1
         - ip route replace default via 10.10.0.1 dev eth1
         - syslogd -R 10.10.30.10:5140
         - ulogd -d -c /etc/ulogd-dmz.conf
@@ -128,6 +175,7 @@ topology:
 
     proxy:
       kind: linux
+      group: dmz
       image: proxy:0.1
       binds:
         - ../configs/proxy/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -137,6 +185,7 @@ topology:
 
     waf:
       kind: linux
+      group: dmz
       image: waf:0.1
       memory: 256MB
       binds:
@@ -159,6 +208,7 @@ topology:
 
     web:
       kind: linux
+      group: dmz
       image: web:0.1
       memory: 128MB
       env:
@@ -169,25 +219,30 @@ topology:
 
     ids:
       kind: linux
+      group: dmz
       image: ids:0.1
       memory: 256MB
+      cap-add:
+        - NET_RAW
+      env:
+        IDS_LOG_MAX_MB: "50"
       binds:
         - ../configs/ids/lab.yaml:/etc/suricata/lab.yaml:ro
         - ../configs/ids/local.rules:/etc/suricata/local.rules:ro
+        - ../configs/ids/ids-start.sh:/etc/suricata/ids-start.sh:ro
+        - ../configs/ids/ids-watchdog.sh:/etc/suricata/ids-watchdog.sh:ro
+        - ../configs/ids/ids-logguard.sh:/etc/suricata/ids-logguard.sh:ro
       exec:
         - ip addr add 10.10.10.14/30 dev eth1
         - ip route replace default via 10.10.10.13 dev eth1
-        # eth2: Mitschnitt vom Spiegelport, ohne Adresse (V-11)
-        - sysctl -w net.ipv6.conf.eth2.disable_ipv6=1
         - syslogd -R 10.10.30.10:5140
-        - suricata --include /etc/suricata/lab.yaml --af-packet -D
+        - sh /etc/suricata/ids-start.sh
 
     #Client-Netz
     router-int:
       kind: linux
+      group: router
       image: router:0.1
-      sysctls:
-        net.ipv4.ip_forward: 1
       exec:
         - ip addr add 10.10.0.6/30 dev eth1
         - ip addr add 10.10.20.1/24 dev eth2
@@ -203,11 +258,10 @@ topology:
     #Backend-Netz
     fw-backend:
       kind: linux
+      group: router
       image: fw:0.1
       binds:
         - ../configs/fw-backend/nftables.nft:/etc/nftables.nft:ro
-      sysctls:
-        net.ipv4.ip_forward: 1
       exec:
         - ip addr add 10.10.0.10/30 dev eth1
         - ip addr add 10.10.30.1/24 dev eth2
@@ -228,8 +282,10 @@ topology:
 
     siem-collector:
       kind: linux
+      group: siem
       image: fluent/fluent-bit:5.1.5
       network-mode: container:siem
+      user: "65534:65534"
       memory: 64MB
       cmd: -c /fluent-bit/etc/dmz.yaml
       binds:
@@ -242,6 +298,7 @@ topology:
 
     siem-responder:
       kind: linux
+      group: siem
       image: responder:0.1
       network-mode: container:siem
       memory: 64MB
@@ -259,6 +316,7 @@ topology:
 
     siem-loki:
       kind: linux
+      group: siem
       image: grafana/loki:3.7.9
       network-mode: container:siem
       memory: 256MB
@@ -272,12 +330,22 @@ topology:
 
     siem-grafana:
       kind: linux
+      group: siem
       image: grafana/grafana:13.3.0
       network-mode: container:siem
       memory: 512MB
+      env-files:
+        - ../configs/siem/secrets/grafana.env
       env:
         GF_SECURITY_ADMIN_USER: admin
-        GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:=dmz-soc}
+        GF_SECURITY_DISABLE_GRAVATAR: "true"
+        GF_SECURITY_COOKIE_SAMESITE: strict
+        GF_SECURITY_CONTENT_SECURITY_POLICY: "true"
+        GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+        GF_SECURITY_X_XSS_PROTECTION: "true"
+        GF_SNAPSHOTS_EXTERNAL_ENABLED: "false"
+        GF_USERS_ALLOW_ORG_CREATE: "false"
+        GF_AUTH_ANONYMOUS_ENABLED: "false"
         GF_USERS_ALLOW_SIGN_UP: "false"
         GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
         GF_ANALYTICS_REPORTING_ENABLED: "false"

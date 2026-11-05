@@ -49,7 +49,16 @@ table inet filter {
     }
 
     chain output {
-        type filter hook output priority filter; policy accept;
+        type filter hook output priority filter; policy drop;
+        oif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        icmp type echo-request accept comment "Diagnose"
+        oifname "eth4" ip saddr 10.10.0.9 ip daddr 10.10.30.10 udp dport 5140 accept comment "K-11 Meldungen -> siem"
+        oifname "eth1" ip saddr 203.0.113.2 ip daddr { 198.51.100.2, 198.51.100.6 } udp sport 500 udp dport 500 accept comment "K-07 IKE, Neuverhandlung durch fw-edge"
+        oifname "eth1" ip saddr 203.0.113.2 ip daddr { 198.51.100.2, 198.51.100.6 } meta l4proto esp accept comment "K-07 ESP nach der Verschluesselung"
+        limit rate 20/second burst 40 packets log prefix "fw-edge output drop: " group 1 queue-threshold 1
+        counter comment "verworfen"
     }
 }
 
