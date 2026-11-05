@@ -1,6 +1,6 @@
 # Technologieentscheidungen – DMZ-Laborumgebung
 
-Stand: 2026-11-04, Version 0.3.
+Stand: 2026-11-05, Version 0.4.
 
 Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Ressourcenbudget. Versionen werden in Phase 2 festgelegt.
 
@@ -8,7 +8,7 @@ Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Res
 
 | Knoten | Technik | Image | RAM geschätzt | Grenze |
 |---|---|---|---|---|
-| `fw-edge` | nftables, WireGuard, ulogd2 | `fw` | 10–25 MB | 64 MB |
+| `fw-edge` | nftables, strongSwan, ulogd2, OpenSSH-Server für K-13 | `fw` | 10–25 MB | 64 MB |
 | `fw-dmz` | nftables, ulogd2, Spiegelung mit tc | `fw` | 10–25 MB | 64 MB |
 | `fw-backend` | nftables | `fw` | 5–15 MB | 64 MB |
 | `router-int`, `inet` | Linux-Routing mit statischen Routen | `router` | je 5–10 MB | je 64 MB |
@@ -22,7 +22,8 @@ Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Res
 | `siem-collector` | Fluent Bit | `fluent/fluent-bit:5.1.5` | gemessen 13 MB | 64 MB |
 | `siem-loki` | Loki | `grafana/loki:3.7.9` | gemessen 77–86 MB | 256 MB |
 | `siem-grafana` | Grafana | `grafana/grafana:13.3.0` | gemessen 316–350 MB | 512 MB |
-| Summe, 17 Container | | | gemessen ca. 520 MB | 2176 MB |
+| `siem-responder` | Python, OpenSSH-Client | `responder` | gemessen 16 MB | 64 MB |
+| Summe, 18 Container | | | gemessen ca. 540 MB | 2240 MB |
 
 Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit `docker stats` und `free -m` im laufenden Betrieb: 2598 MB verfügbar, kein Swap genutzt.
 
@@ -30,13 +31,14 @@ Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit
 
 | Image | Basis | Inhalt | Größe |
 |---|---|---|---|
-| `fw` | `alpine:3.24` | iproute2, nftables, ulogd, tcpdump, wireguard-tools | 15,8 MB |
+| `fw` | `alpine:3.24` | iproute2, nftables, ulogd, tcpdump, strongSwan, OpenSSH-Server, conntrack-tools | 27,1 MB |
 | `router` | `alpine:3.24` | iproute2, tcpdump | 11,6 MB |
 | `client` | `alpine:3.24` | iproute2, curl, tcpdump, wireguard-tools, socat, openssl | 19,6 MB |
 | `proxy` | `nginx:1.28-alpine` | Nginx, selbst signiertes Zertifikat nach BSI TR-02102-2 | 70,4 MB |
 | `waf` | `owasp/modsecurity-crs:4.30.0-nginx-alpine` | Nginx, ModSecurity v3, CRS 4.30, iproute2 | 110 MB |
 | `web` | `python:3.12-alpine3.24` | Flask, gunicorn, eigene Anwendung | 58,2 MB |
 | `ids` | `alpine:3.24` | Suricata 8.0.8, iproute2 | 87,2 MB |
+| `responder` | `python:3.12-alpine3.24` | Responder, Befehl `respond`, OpenSSH-Client, su-exec. Teilt die Basisschichten mit `web`. | 52,6 MB |
 | `fluent/fluent-bit:5.1.5`, `grafana/loki:3.7.9`, `grafana/grafana:13.3.0` | offiziell, unverändert | SIEM | nicht einzeln gemessen, alle Images zusammen 2,2 GB (`docker system df`, 2026-11-04) |
 | Summe eigene Images | | | 373 MB |
 
@@ -158,7 +160,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 ### E-14 Normalisierung im Collector
 
-- **Entscheidung:** Fluent Bit zerlegt die Meldungen beim Eingang in Felder (`configs/siem/fluent-bit.yaml`): Suricata-Alarme als JSON, WAF und Firewalls über die regulären Ausdrücke `waf-deny`, `waf-warn` und `fw-drop`. Die Herkunft heißt bei allen Sensoren `client`: bei der WAF die echte Client-Adresse, beim IDS `xff` und ersatzweise `src_ip`, bei den Firewalls die Quelladresse. Die Originalmeldung bleibt erhalten.
+- **Entscheidung:** Fluent Bit zerlegt die Meldungen beim Eingang in Felder (`configs/siem/fluent-bit.yaml`): Suricata-Alarme als JSON, WAF und Firewalls über die regulären Ausdrücke `waf-deny`, `waf-warn` und `fw-drop`. Die Herkunft heißt bei allen Sensoren `client`: bei der WAF die echte Client-Adresse, beim IDS `xff` nur für Alarme hinter dem Proxy (Absender `proxy` oder `waf`, dort setzt der Proxy den Header selbst), sonst `src_ip`, bei den Firewalls die Quelladresse. Seit 2026-11-05: Vorher übernahm der Collector `xff` auch vor dem Proxy, ein Angreifer konnte auf TCP 80 so eine fremde Adresse als Quelle angeben (RE-09). Suricata 8 legt `xff` bei Alarmen in das Objekt `alert`. Der Filter `nest` hebt dieses Objekt auf die oberste Ebene (`alert_xff`, `alert_signature_id`, …), das sind dieselben Namen, die Loki beim Zerlegen erzeugt. Der Ausdruck `fw-drop` erlaubt seit der neueren ulogd-Version aus Alpine 3.24 mehrere Leerzeichen nach dem Präfix. Die Originalmeldung bleibt erhalten.
 - **Begründung:** Ein einheitliches Feld macht die Korrelation über Sensoren hinweg zu einer einfachen Abfrage („Top-Quellen“). Die Dashboard-Abfragen bleiben kurz und lesbar.
 - **Geprüft:** Die Ausdrücke wurden an allen echten Meldungen eines Testlaufs geprüft. Die Tests S-03 bis S-05 prüfen die Felder bei jedem Lauf.
 
@@ -176,6 +178,31 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Geprüft:** Alle zwölf Abfragen wurden gegen Loki 3.7.9 ausgeführt. Test S-06 prüft Dashboard, Startseite und Alarm-Stream.
 - **Anforderungen:** MON-03, MON-05.
 
+### E-17 Reaktive Maßnahmen über einen Responder im SIEM
+
+- **Entscheidung:** Ein eigener Container `siem-responder` im Netz von `siem` erhält von Fluent Bit jedes normalisierte Ereignis (TCP 5170, nur lokal). Er wertet es gegen die Playbooks P-1 bis P-5 aus `configs/response/playbook.json` aus und setzt Sperren und Quarantänen an `fw-edge`. Jede Aktion meldet er per Syslog an das SIEM. Der Operator steuert ihn mit `respond` (`make response-status`, `block`, `release`, `response-mode`). Konzept, Playbooks und Ablauf bei einem Vorfall: `docs/reaktion.md`.
+- **Begründung:** Die Entscheidung fällt dort, wo alle Sensoren zusammenlaufen. So kann eine Regel Ereignisse verschiedener Sensoren nutzen, etwa „IDS-Alarm hinter der WAF“ (P-2). Fluent Bit gibt die Ereignisse ohne Umweg über Loki weiter, das hält die Reaktion unter 1 s. Ein eigener Container hält die offiziellen SIEM-Images unverändert (E-09).
+- **Alternativen:** Grafana-Alerting mit Webhook (Auswertung frühestens alle 10 s). fail2ban auf jeder Firewall (sieht nur die eigenen Meldungen, keine Korrelation). Suricata im IPS-Modus (nur ein Sensor, und das IDS hängt am Spiegelport, nicht im Datenweg).
+- **Anforderungen:** SEC-04, A-06, A-07.
+
+### E-18 Kanal K-13 über SSH mit Forced Command
+
+- **Entscheidung:** Der Responder hält eine SSH-Sitzung zu `fw-edge` 10.10.0.9. `sshd` lauscht nur dort, nimmt nur `root@10.10.30.10` mit einem ECDSA-P-384-Schlüssel an und startet für jede Sitzung `configs/response/fw-response.sh`. Verfahren nach BSI TR-02102-4: `ecdh-sha2-nistp384`, `ecdsa-sha2-nistp384`, AES-256-GCM.
+- **Begründung:** Verschlüsselt und gegenseitig authentisiert, ohne eigenen Code für die Authentisierung. Die Firewall prüft jede Zeile selbst und verweigert geschützte Adressen. Ein kompromittiertes SIEM erhält damit keine Shell und kann DMZ und Backend nicht sperren. Die stehende Sitzung spart den Verbindungsaufbau bei jeder Sperre.
+- **Alternativen:** Abruf einer Sperrliste durch die Firewall (kein lauschender Dienst, aber Verzögerung um das Abrufintervall). Eigene HTTP-Schnittstelle (mehr eigener Code auf der Firewall).
+- **Geprüft:** RE-01 und RE-02.
+
+### E-19 Anti-Spoofing auf `fw-edge`
+
+- **Entscheidung:** Kette `prerouting` mit Priorität `raw` in `table inet filter`. Jede Schnittstelle nimmt nur Absender aus ihrem Netz an. Aus dem Internet kommen keine internen, privaten oder reservierten Absender und nicht die eigene öffentliche Adresse, außer entschlüsselt aus dem VPN-Tunnel (`meta ipsec`). Verworfene Pakete meldet `fw-edge` gedrosselt als `spoof drop`.
+- **Begründung:** Automatische Sperren dürfen nur auf echten Absendern beruhen. Sonst sperrt ein Angreifer mit gefälschten Paketen einen internen Client oder die VPN-Gegenstellen. Explizite Regeln je Schnittstelle statt `fib`, damit das Regelwerk ohne weiteres Kernelmodul lädt und im Bericht lesbar bleibt.
+- **Geprüft:** RE-10.
+
+### E-20 Beweissicherung und Wiederherstellung als Skripte
+
+- **Entscheidung:** `scripts/collect-evidence.sh` (`make evidence`) sichert Ereignisse, Zustände, Logs und Container-Änderungen mit Prüfsummen. `scripts/recover.sh` (`make recover`) sichert Beweise, setzt alle Systeme aus den Images neu auf und trägt die Sperren wieder ein.
+- **Begründung:** Die Vorlesung verlangt nach der Eindämmung Beweissicherung und die Wiederherstellung des sicheren Betriebs nach festgelegten Abläufen. Skripte machen den Ablauf wiederholbar und verhindern, dass Beweise beim Neuaufbau verloren gehen.
+
 ## Risiken und Prüfungen
 
 | Nr. | Risiko | Prüfung |
@@ -187,7 +214,11 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 | R-05 | Logs füllen die Disk. | Loki speichert 24 h. Offen: `eve.json` und Container-Logs begrenzen. |
 | R-06 | Der Bau der Images bricht über ein VPN ab (`I/O error` bei `apk`), weil das VPN die MTU verkleinert. | Images ohne VPN bauen oder die MTU von Docker anpassen. Vor dem Labortermin alle Images bauen. Hinweis im README. |
 | R-07 | Grafana erreicht seine Speichergrenze und wird vom Kernel beendet. | Gemessen bis 349 MB, Grenze von 384 auf 512 MB erhöht. Test S-00 prüft auf Abbruch wegen Speichermangel. |
-| R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. |
+| R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. Das Image `responder` teilt die Basis mit `web`. |
+| R-09 | Die automatische Sperre trifft Unbeteiligte (gefälschte Absender, gefälschter `X-Forwarded-For`, Fehlalarme). | Anti-Spoofing (E-19), `xff` nur hinter dem Proxy (E-14), Schutzliste dreifach, Schwellen, Ablaufzeiten, Beobachtungsmodus. Tests RE-02, RE-09, RE-10, RE-11. |
+| R-10 | Ein kompromittiertes SIEM missbraucht K-13. | Forced Command, Prüfung auf der Firewall, Schutzliste im Regelwerk (E-18). Restrisiko: Sperre nicht geschützter Adressen. |
+| R-11 | Der Responder fällt aus. | Sperren bleiben auf `fw-edge` und laufen dort ab. Herzschlag im Dashboard. Test RE-13. |
+| R-12 | Die Angriffe der Schicht-Tests sperren den Angreifer für die folgenden Tests aus. | `tests/lib-response.sh` schaltet für diese Tests in den Beobachtungsmodus und hebt Sperren vorher und nachher auf. |
 
 ## Quellen
 
@@ -197,3 +228,6 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - OISF: Suricata, Eve JSON Output. https://docs.suricata.io/en/suricata-7.0.13/output/eve/eve-json-output.html
 - OWASP CRS-Projekt: modsecurity-crs-docker. https://github.com/coreruleset/modsecurity-crs-docker
 - Linux-Kernel: netfilter, allow logging from non-init namespaces. https://lkml.iu.edu/hypermail/linux/kernel/1701.3/05214.html
+- BSI: TR-02102-4, Verwendung von Secure Shell (SSH). https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/Technische-Richtlinien/TR-nach-Thema-sortiert/tr02102/tr02102_node.html
+- OpenSSH: sshd_config(5). https://man.openbsd.org/sshd_config
+- nftables Wiki: Sets. https://wiki.nftables.org/wiki-nftables/index.php/Sets

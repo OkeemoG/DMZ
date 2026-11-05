@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TAG="0.1"
-IMAGES=(fw router client proxy web waf ids)
+IMAGES=(fw router client proxy web waf ids responder)
 
 cd "$(dirname "$0")/../images"
 

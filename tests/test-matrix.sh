@@ -14,6 +14,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 fail=0
 
 x() {

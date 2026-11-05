@@ -6,6 +6,8 @@ RUN apk add --no-cache \
       nftables \
       ulogd \
       tcpdump \
-      strongswan
+      strongswan \
+      openssh-server \
+      conntrack-tools
 
 CMD ["sleep", "infinity"]

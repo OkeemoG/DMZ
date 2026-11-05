@@ -3,3 +3,5 @@ clab-*/
 *.pcap
 *.key
 configs/vpn/pki/
+configs/response/keys/
+evidence/

@@ -1,0 +1,41 @@
+ListenAddress 10.10.0.9:22
+HostKey /etc/ssh/response/host_key
+PidFile /run/sshd-response.pid
+
+KexAlgorithms ecdh-sha2-nistp384
+HostKeyAlgorithms ecdsa-sha2-nistp384
+PubkeyAcceptedAlgorithms ecdsa-sha2-nistp384
+Ciphers aes256-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-512
+
+AllowUsers root@10.10.30.10
+PermitRootLogin forced-commands-only
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+AuthorizedKeysFile /etc/ssh/response/authorized_keys
+StrictModes yes
+ForceCommand /bin/sh /etc/response/fw-response
+
+PermitTTY no
+AllowTcpForwarding no
+AllowStreamLocalForwarding no
+AllowAgentForwarding no
+X11Forwarding no
+PermitTunnel no
+PermitUserEnvironment no
+GatewayPorts no
+UseDNS no
+
+MaxAuthTries 2
+MaxSessions 2
+MaxStartups 3:50:6
+LoginGraceTime 10
+ClientAliveInterval 10
+ClientAliveCountMax 3
+PerSourcePenaltyExemptList 10.10.30.10
+
+SyslogFacility AUTH
+LogLevel VERBOSE

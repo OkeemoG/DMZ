@@ -1,6 +1,6 @@
 # Kommunikationsmatrix – DMZ-Laborumgebung
 
-Stand: 2026-11-04, Version 0.3 (passend zu Netzplan 0.2, Adressplan 0.3 und den Regelwerken in `configs/fw-*`)
+Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den Regelwerken in `configs/fw-*`)
 
 ## Grundsätze
 
@@ -8,6 +8,8 @@ Stand: 2026-11-04, Version 0.3 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 - Die Tabelle nennt den Verbindungsaufbau. Antworten auf bestehende Verbindungen sind erlaubt.
 - `fw-edge` und `fw-dmz` protokollieren verworfene Pakete und melden sie an das SIEM, höchstens 20 Meldungen pro Sekunde und Regelkette. Verworfen wird weiterhin alles, nur die Meldung ist gedrosselt, damit ein Angreifer das SIEM nicht fluten kann.
 - Kein DNS nur IP-Adressen
+- Reaktive Sperren und Quarantäne (`docs/reaktion.md`) gehen jeder Zeile vor: `fw-edge` verwirft Verkehr von und zu gesperrten Adressen vor allen anderen Regeln.
+- Anti-Spoofing auf `fw-edge`: Jede Schnittstelle nimmt nur Absender aus ihrem Netz an, das Internet keine internen oder reservierten Adressen außer im VPN-Tunnel.
 
 ## Erlaubte Verbindungen
 
@@ -19,13 +21,13 @@ Stand: 2026-11-04, Version 0.3 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 | K-04 | Client-Netz 10.10.20.0/24 | `proxy` 10.10.10.2 | TCP 443 | `fw-edge`, `fw-dmz` | Zugriff auf die Webanwendung von intern | SYS-05, NET-02 |
 | K-05 | Client-Netz 10.10.20.0/24 | Internet | TCP 80, TCP 443, ICMP Echo | `fw-edge` (Quellumsetzung) | Internetzugang der Clients | NET-06 |
 | K-06 | DMZ 10.10.10.0/24 | Internet | TCP 80, TCP 443, ICMP Echo | `fw-dmz`, `fw-edge` (Quellumsetzung) | Internetzugang der DMZ-Systeme, z. B. für Aktualisierungen. Die Aufgabenstellung verlangt, dass das Internet von der DMZ aus erreichbar ist. Alle übrigen Dienste sperrt V-12. | NET-06 |
-| K-07 | `ro-client1` 198.51.100.2, `ro-client2` 198.51.100.6 | `fw-edge` 203.0.113.2 | UDP 51820 | `fw-edge` | Aufbau des VPN-Tunnels | NET-05 |
+| K-07 | `ro-client1` 198.51.100.2, `ro-client2` 198.51.100.6 | `fw-edge` 203.0.113.2 | UDP 500 (IKEv2), ESP | `fw-edge` | Aufbau und Daten des VPN-Tunnels (IKEv2/IPsec, strongSwan) | NET-05 |
 | K-08 | Remote Office im Tunnel, 10.99.0.2 und 10.99.0.3 | `proxy` 10.10.10.2 | TCP 443 | `fw-edge`, `fw-dmz` | Zugriff auf die Webanwendung über VPN. Vorläufig, weitere Ziele offen. | NET-05 |
 | K-09 | `ids` 10.10.10.14, `waf` 10.10.10.6 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-dmz`, `fw-edge`, `fw-backend` | Meldung erkannter Angriffe: WAF über Nginx `error_log`, IDS über `busybox syslogd -R` | MON-02 |
 | K-10 | `fw-dmz` 10.10.0.2 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-edge`, `fw-backend` | Meldung verworfener Pakete (NFLOG, ulogd2, `busybox syslogd -R`) | MON-02 |
 | K-11 | `fw-edge` 10.10.0.9 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-backend` | Meldung verworfener Pakete (NFLOG, ulogd2, `busybox syslogd -R`) | MON-02 |
 | K-12 | Browser des Operators (VM oder Host der VM) | `siem`, Port 3000 auf der VM freigegeben | TCP 3000 (Grafana) | keines, eigenes Management-Netz nur für `siem` | Anzeige für das SOC über einen Out-of-Band-Zugang. Er führt in keine Zone, weil nur `siem` daran hängt und `siem` nicht weiterleitet. Loki ist nur innerhalb von `siem` erreichbar. | MON-03 |
-| K-13 | `siem` | `fw-edge` | offen | `fw-backend` | Reaktive Sperre, zurückgestellt | SEC-04, A-06 |
+| K-13 | `siem` 10.10.30.10 (`siem-responder`) | `fw-edge` 10.10.0.9 | TCP 22 (SSH, nur Forced Command `fw-response`, BSI TR-02102-4) | `fw-backend`, `fw-edge` (nur `eth4`) | Reaktive Sperren und Quarantäne setzen und aufheben | SEC-04, A-06 |
 
 ## Verbotene Verbindungen
 
@@ -50,9 +52,9 @@ Die Liste ist eine Auswahl. Jede Zeile ist ein Testfall für Phase 3 und ein mö
 
 | System | Aufgabe |
 |---|---|
-| `fw-edge` | Übergänge zwischen Internet, DMZ, Client-Netz, Backend-Netz und Tunnel. Adressumsetzung. VPN-Endpunkt. |
+| `fw-edge` | Übergänge zwischen Internet, DMZ, Client-Netz, Backend-Netz und Tunnel. Adressumsetzung. VPN-Endpunkt. Anti-Spoofing. Durchsetzung der reaktiven Sperren. |
 | `fw-dmz` | Eingang und Ausgang der DMZ. Jeder Verkehr zwischen zwei DMZ-Systemen. |
-| `fw-backend` | Lässt nur K-09 bis K-11 hinein. Lässt nichts hinaus. |
+| `fw-backend` | Lässt nur K-09 bis K-11 hinein. Lässt nur K-13 hinaus. |
 | `router-int` | Routet nur. Die Filterung des Client-Netzes liegt bei `fw-edge`. |
 
 ## Festlegungen
@@ -69,6 +71,7 @@ Die Liste ist eine Auswahl. Jede Zeile ist ein Testfall für Phase 3 und ein mö
 | `tests/test-ids.sh` | V-11 (I-01), V-12 mit Erkennung (I-05) |
 | `tests/test-proxy.sh` | K-01 bis K-04 Ende zu Ende |
 | `tests/test-siem.sh` | K-09 mit echten Angriffen (S-03 WAF, S-04 IDS), K-10, K-11 (S-05), K-12 (S-01) |
-| noch offen | K-07, K-08, V-10 (VPN), K-13 |
+| `tests/test-vpn.sh` | K-07, K-08, V-10 |
+| `tests/test-response.sh` | K-13 (RE-01), Anti-Spoofing (RE-10), Sperren vor allen Zeilen (RE-03 bis RE-08) |
 
 

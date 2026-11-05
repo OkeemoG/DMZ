@@ -1,12 +1,13 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-attacks test-all
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-response test-attacks test-all response-status response-mode block quarantine release evidence recover
 
-TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-attacks
+TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-response test-attacks
 
 images:
 	bash scripts/build-images.sh
 
 pki: images
 	bash scripts/gen-vpn-pki.sh
+	bash scripts/gen-response-keys.sh
 
 deploy: images pki
 	containerlab deploy -t topology/dmz.clab.yml --reconfigure
@@ -46,8 +47,37 @@ test-waf:
 test-siem:
 	bash tests/test-siem.sh
 
+test-response:
+	bash tests/test-response.sh
+
 test-attacks:
 	bash tests/test-attacks.sh
+
+RESPOND := docker exec clab-dmz-siem-responder respond
+
+response-status:
+	@$(RESPOND) status
+
+response-mode:
+	@$(RESPOND) mode $(MODE)
+
+block:
+	@[ -n "$(IP)" ] || { echo "usage: make block IP=a.b.c.d [TTL=600]"; exit 2; }
+	@$(RESPOND) block $(IP) $(or $(TTL),600)
+
+quarantine:
+	@[ -n "$(IP)" ] || { echo "usage: make quarantine IP=10.10.20.x [TTL=0]"; exit 2; }
+	@$(RESPOND) quarantine $(IP) $(or $(TTL),0)
+
+release:
+	@[ -n "$(IP)" ] || { echo "usage: make release IP=a.b.c.d"; exit 2; }
+	@$(RESPOND) release $(IP)
+
+evidence:
+	bash scripts/collect-evidence.sh $(IP) $(or $(MINUTES),30)
+
+recover:
+	bash scripts/recover.sh
 
 test-all:
 	@[ -n "$(TESTS)" ] || { echo "TESTS is empty"; exit 1; }

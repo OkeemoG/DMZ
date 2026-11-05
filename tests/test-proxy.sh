@@ -2,6 +2,8 @@
 set -uo pipefail
 
 P="clab-dmz"
+. "$(dirname "$0")/lib-response.sh"
+response_suspend
 RUN="p$(date +%s)$$"
 fail=0
 
