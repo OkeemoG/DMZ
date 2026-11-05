@@ -181,7 +181,7 @@ Die Schritte nach der automatischen Eindämmung erledigt der Operator.
 | RE-13 | Sperren bleiben beim Neustart des Responders bestehen, Responder übernimmt den Stand |
 | RE-14 | Dashboard und Herzschlag des Responders |
 
-Dazu die Angriffe A-1 (Sperre nach dem dritten Web-Angriff), A-2 (Evasion-Kampagne bricht ab) und A-3 (Quarantäne nach Seitwärtsbewegung).
+Dazu die Angriffe A-1 (Sperre nach dem dritten Web-Angriff), A-2 (Evasion-Kampagne bricht ab), A-3 (Quarantäne nach Seitwärtsbewegung) und A-4 (Sperre eines Command-and-Control-Servers, P-5).
 
 ## Messwerte
 

@@ -71,7 +71,7 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 | 3 Sicherheitssysteme | Erledigt. Firewalls nach Matrix 0.4, `proxy`, `web`, `waf`, `ids` und VPN mit strongSwan (E-04, `test-vpn`). |
 | 4 Logging und SIEM | Erledigt. Fluent Bit, Loki und Grafana in drei Containern (E-09), alle vier Sensoren melden in unter 1 s (E-10, E-11), Normalisierung (E-14), Zugang über Out-of-Band-Netz (E-15), Dashboard „SOC – DMZ“ (E-16). Test `test-siem`. |
 | 5 Härtung (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Container ohne Privilegien, minimale Rechte, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Watchdog und Logbegrenzung, Proxy-Zeitlimits, Grafana-Passwort, Docker-Loglimits (`docs/haertung.md`, E-21, `test-hardening`). |
-| 6 Reaktion (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Responder mit Playbooks P-1 bis P-5, Sperren und Quarantäne an `fw-edge`, Kanal K-13, Anti-Spoofing, Beweissicherung, Wiederherstellung, Dashboard, Test `test-response`, A-1 bis A-3 mit Reaktion (`docs/reaktion.md`). |
+| 6 Reaktion (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Responder mit Playbooks P-1 bis P-5, Sperren und Quarantäne an `fw-edge`, Kanal K-13, Anti-Spoofing, Beweissicherung, Wiederherstellung, Dashboard, Test `test-response`, A-1 bis A-4 mit Reaktion (`docs/reaktion.md`). |
 | 7 bis 8 | Offen: schriftliche Dokumentation, Ablaufplan der Live-Demo. |
 
 Alle Tests laufen mit `make test-all` (Ablauf siehe `README.md`).
@@ -134,8 +134,8 @@ Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `c
 | Kriterium | Stand am 2026-11-05 |
 |---|---|
 | Vollständigkeit der Netze und Systeme | DMZ mit Firewall, Reverse-Proxy, WAF, IDS und Webserver sowie SIEM im Backend umgesetzt und getestet. VPN mit strongSwan umgesetzt (`test-vpn`). |
-| Drei Angriffe, hoher Schwierigkeitsgrad | A-1 bis A-3 in `attacks/`, A-3 aus dem Client-Netz. |
-| Proaktive, detektierende und reaktive Maßnahmen | Reaktion umgesetzt: automatische Sperre, Quarantäne, Sperre von C2-Zielen, Beweissicherung, Wiederherstellung (`docs/reaktion.md`). `test-response` und A-1 bis A-3 bestanden. |
+| Drei Angriffe, hoher Schwierigkeitsgrad | A-1 bis A-4 in `attacks/` (vier Angriffe), A-3 aus dem Client-Netz, A-4 aus der DMZ. |
+| Proaktive, detektierende und reaktive Maßnahmen | Reaktion umgesetzt: automatische Sperre, Quarantäne, Sperre von C2-Zielen, Beweissicherung, Wiederherstellung (`docs/reaktion.md`). `test-response` und A-1 bis A-4 bestanden. |
 | Anzeige innerhalb von 1 s | Erfüllt: Transport bis Loki 50 bis 650 ms, Dashboard mit 1 s Aktualisierung, Live-Ansicht ohne Abfrage-Intervall (E-16). |
 | Stabilität in der Demo | Alle Tests bestanden. Speichergrenzen gesetzt. Bekannt: Suricata ohne Überwachung. |
 | Methodenkompetenz | Phasenmodell, IDs für Anforderungen, Verbindungen und Tests, Entscheidungen mit Alternativen. |
@@ -155,7 +155,7 @@ Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `c
 | 5 | Anzeige innerhalb von 1 s, Grafana mit Loki ausreichend | Erledigt (R-01, E-16). |
 | 6 | Zugriff auf das Dashboard (K-12) | Erledigt: Management-Netz nur für `siem`, Port 3000 auf der VM (E-15). Zugriff im Labor der DHBW noch prüfen. |
 | 7 | Reaktive Maßnahme (A-06) und Messmethode (A-07) | Umgesetzt (E-17 bis E-20). Messung: RE-03 misst die Zeit vom dritten geblockten Angriff bis zur wirksamen Sperre, gemessen 70 bis 250 ms, Ziel unter 1 s erfüllt. |
-| 8 | Drei Angriffe und Werkzeuge des Angreifers | Umgesetzt: A-1 bis A-3 mit curl, socat und openssl aus dem Image `client`. |
+| 8 | Drei Angriffe und Werkzeuge des Angreifers | Umgesetzt: A-1 bis A-4 mit curl, socat und openssl aus dem Image `client`. |
 | 9 | Diagramm der Datenflüsse (DOC-03) | Offen, Phase 7. |
 | 10 | Wiederholungsnachweis für `install.sh`, Containerlab-Version festschreiben | Version 0.82.0 festgeschrieben (E-13). Wiederholungsnachweis offen. |
 | 11 | Übersicht der KI-Unterstützung für das Hilfsmittelverzeichnis | Laufend, Abschluss in Phase 7. |

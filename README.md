@@ -141,7 +141,7 @@ docker exec clab-dmz-client1 curl -sk -G --data-urlencode "file=../../etc/passwd
 | `make test-vpn` | Tunnel und Verfahren nach BSI TR-02102-3, Zugriff über den Tunnel, Sperren, Abweisung unzulässiger Verfahren, PKI |
 | `make test-hardening` | Härtung: Container ohne Privilegien und mit minimalen Rechten, Ausbruchsversuche, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Neustart und Logbegrenzung, Docker-Loglimits, Slowloris, Grafana-Zugang (`docs/haertung.md`) |
 | `make test-response` | Automatische Reaktion: Kanal K-13 nach BSI TR-02102-4, Schutzliste, alle Playbooks, Reaktionszeit unter 1 s, Anti-Spoofing, Beobachtungsmodus, Ablauf, Neustart, Dashboard |
-| `make test-attacks` | Die drei Angriffe A-1 bis A-3 mit Selbstprüfung (`attacks/README.md`) |
+| `make test-attacks` | Die vier Angriffe A-1 bis A-4 mit Selbstprüfung (`attacks/README.md`) |
 
 Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie voraus (`make deploy`). Die Tests der einzelnen Schichten schalten die automatische Reaktion für ihre Dauer in den Beobachtungsmodus und heben vorhandene Sperren auf, damit ihre Angriffe den Angreifer nicht für die folgenden Tests aussperren.
 
@@ -154,7 +154,7 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 | `configs/` | Konfiguration je Knoten: Firewall-Regeln, Proxy, WAF, IDS, VPN |
 | `configs/vpn/pki/` | Labor-PKI des VPN, erzeugt von `make pki`, nicht im Repo |
 | `configs/response/` | Playbooks, `fw-response` und `sshd` für K-13. `keys/` erzeugt `make pki`, nicht im Repo |
-| `attacks/` | Angriffe A-1 bis A-3 |
+| `attacks/` | Angriffe A-1 bis A-4 |
 | `evidence/` | Gesicherte Beweise von `make evidence`, nicht im Repo |
 | `scripts/` | `install.sh`, `harden-host.sh`, `build-images.sh`, `gen-vpn-pki.sh`, `gen-response-keys.sh`, `gen-siem-secrets.sh`, `collect-evidence.sh`, `recover.sh` |
 | `configs/siem/secrets/` | Grafana-Passwort, erzeugt von `make pki`, nicht im Repo |
