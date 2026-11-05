@@ -134,6 +134,7 @@ respond block 10.10.10.10 60 RE-02 >/dev/null 2>&1; rc=$?
 result RE-02 "responder refuses to block web 10.10.10.10" 1 "$rc"
 result RE-02 "fw-edge refuses to block siem 10.10.30.10 even if asked directly" yes "$(has "$(ssh_fw root@10.10.0.9 block 10.10.30.10 60 RE-02)" '^ERR protected')"
 result RE-02 "fw-edge refuses VPN peer 198.51.100.2 (spoofing would cut the tunnel)" yes "$(has "$(ssh_fw root@10.10.0.9 block 198.51.100.2 60 RE-02)" '^ERR protected')"
+result RE-02 "fw-edge refuses to quarantine the client gateway 10.10.20.1 (router-int)" yes "$(has "$(ssh_fw root@10.10.0.9 quarantine 10.10.20.1 0 RE-02)" '^ERR protected')"
 result RE-02 "fw-edge refuses to quarantine an external address" yes "$(has "$(ssh_fw root@10.10.0.9 quarantine 192.0.2.10 0 RE-02)" '^ERR not internal')"
 x fw-edge nft add element inet response blocklist '{ 10.10.10.2 timeout 30s }' >/dev/null 2>&1
 result RE-02 "second safeguard: proxy listed by hand in the ruleset, client1 still reaches it" 200 "$(portal client1 10.10.10.2)"
@@ -209,15 +210,17 @@ respond release 10.10.20.10 >/dev/null 2>&1
 result RE-06 "after release client1 reaches the portal again" 200 "$(portal client1 10.10.10.2)"
 clean
 
-echo "== RE-07 P-5 connection to command and control: destination blocked"
+echo "== RE-07 P-5 connection to command and control: connections from inside to the destination blocked"
 x attacker ip addr add 192.0.2.99/24 dev eth1 >/dev/null 2>&1
 docker exec -d "${P}-attacker" socat TCP-LISTEN:443,bind=192.0.2.99,fork,reuseaddr "SYSTEM:echo ok"
 sleep 0.5
 result RE-07 "control: web -> 192.0.2.99 TCP 443 (K-06)" reachable "$(web_reach 192.0.2.99 443)"
 web_reach 192.0.2.99 4444 >/dev/null
-result RE-07 "web -> 192.0.2.99 TCP 4444 (V-12) blocks the destination" yes "$(wait_active blocklist 192.0.2.99)"
-result RE-07 "reason P-5" yes "$(has "$(entry blocklist 192.0.2.99)" 'comment "P-5"')"
+result RE-07 "web -> 192.0.2.99 TCP 4444 (V-12) blocks connections to 192.0.2.99" yes "$(wait_active egress 192.0.2.99)"
+result RE-07 "reason P-5" yes "$(has "$(entry egress 192.0.2.99)" 'comment "P-5"')"
 result RE-07 "web -> 192.0.2.99 TCP 443 now dropped as well" blocked "$(web_reach 192.0.2.99 443)"
+result RE-07 "client1 -> 192.0.2.99 TCP 443 dropped too (whole company)" blocked "$(reach client1 192.0.2.99 443)"
+result RE-07 "192.0.2.99 itself still reaches the portal (no denial of service by a compromised server)" reachable "$(reach attacker 203.0.113.2 443 192.0.2.99)"
 result RE-07 "192.0.2.10 not affected" no "$(active blocklist 192.0.2.10)"
 x attacker pkill -f "bind=192.0.2.99" >/dev/null 2>&1
 x attacker ip addr del 192.0.2.99/24 dev eth1 >/dev/null 2>&1

@@ -70,7 +70,7 @@ Verworfene Pakete melden `fw-edge` und `fw-dmz` gedrosselt als `output drop` an 
 `configs/ids/ids-start.sh` startet zwei Schleifen:
 
 - `ids-watchdog.sh` startet Suricata im Vordergrund und nach jedem Ende nach 2 s neu. Jeder Neustart geht als Meldung `ids-watchdog` an das SIEM.
-- `ids-logguard.sh` prüft alle 30 s die Logdateien von Suricata und leert eine Datei, die größer als 50 MB ist (`IDS_LOG_MAX_MB`). Auch das geht an das SIEM. Die Alarme liegen ohnehin im SIEM, die lokale Datei dient nur Tests und Beweissicherung.
+- `ids-logguard.sh` prüft alle 30 s die Logdateien von Suricata und leert eine Datei, die größer als 50 MB ist (`IDS_LOG_MAX_MB`), und lässt Suricata danach seine Logdateien neu öffnen (SIGHUP). Auch das geht an das SIEM. Die Alarme liegen ohnehin im SIEM, die lokale Datei dient nur Tests und Beweissicherung.
 
 ### Proxy (H-08)
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PROTECTED="10.10.0.0/24 10.10.10.0/24 10.10.30.0/24 127.0.0.0/8 198.51.100.2/32 198.51.100.6/32 203.0.113.0/30"
+PROTECTED="10.10.0.0/24 10.10.10.0/24 10.10.20.1/32 10.10.30.0/24 127.0.0.0/8 198.51.100.2/32 198.51.100.6/32 203.0.113.0/30"
 INTERNAL="10.10.20.0/24 10.99.0.0/24"
 MAX_SECONDS=86400
 TABLE="inet response"
@@ -50,8 +50,9 @@ in_nets() {
 }
 
 kill_flows() {
-  local n=0 out
-  for dir in -s -d; do
+  local n=0 out dirs="-s -d"
+  [ "$2" = "egress" ] && dirs="-d"
+  for dir in $dirs; do
     out=$(conntrack -D "$dir" "$1" 2>&1 >/dev/null)
     out=$(printf '%s' "$out" | sed -n 's/.* \([0-9][0-9]*\) flow entries have been deleted.*/\1/p')
     n=$(( n + ${out:-0} ))
@@ -73,8 +74,8 @@ add_to() {
     say "ERR not internal ${ip}"
     return
   fi
-  if [ "$set" = "blocklist" ] && [ "$sec" -eq 0 ]; then
-    say "ERR block needs seconds > 0"
+  if [ "$set" != "quarantine" ] && [ "$sec" -eq 0 ]; then
+    say "ERR ${set} needs seconds > 0"
     return
   fi
   [ "$sec" -gt 0 ] && timeout=" timeout ${sec}s"
@@ -87,7 +88,7 @@ NFT
     say "ERR nft failed"
     return
   fi
-  flows=$(kill_flows "$ip")
+  flows=$(kill_flows "$ip" "$set")
   audit "${set} ${ip} seconds=${sec} reason=${reason} flows=${flows}"
   say "OK ${set} ${ip} ${sec} flows=${flows}"
 }
@@ -99,6 +100,8 @@ add element ${TABLE} blocklist { $1 }
 delete element ${TABLE} blocklist { $1 }
 add element ${TABLE} quarantine { $1 }
 delete element ${TABLE} quarantine { $1 }
+add element ${TABLE} egress { $1 }
+delete element ${TABLE} egress { $1 }
 NFT
   then
     say "ERR nft failed"
@@ -110,7 +113,7 @@ NFT
 
 list() {
   local set
-  for set in blocklist quarantine; do
+  for set in blocklist quarantine egress; do
     nft list set ${TABLE} "$set" 2>/dev/null \
       | tr -d '\n\t' \
       | sed -n 's/.*elements = { \(.*\) }.*/\1/p' \
@@ -122,7 +125,7 @@ list() {
 }
 
 flush() {
-  nft flush set ${TABLE} blocklist && nft flush set ${TABLE} quarantine || { say "ERR nft failed"; return; }
+  nft flush set ${TABLE} blocklist && nft flush set ${TABLE} quarantine && nft flush set ${TABLE} egress || { say "ERR nft failed"; return; }
   audit "flush"
   say "OK flush"
 }
@@ -140,6 +143,7 @@ dispatch() {
     ping)       say "OK pong" ;;
     block)      if [ $# -eq 4 ]; then add_to blocklist "$2" "$3" "$4"; else say "ERR usage: block IP SECONDS REASON"; fi ;;
     quarantine) if [ $# -eq 4 ]; then add_to quarantine "$2" "$3" "$4"; else say "ERR usage: quarantine IP SECONDS REASON"; fi ;;
+    egress)     if [ $# -eq 4 ]; then add_to egress "$2" "$3" "$4"; else say "ERR usage: egress IP SECONDS REASON"; fi ;;
     release)    if [ $# -eq 2 ]; then release "$2"; else say "ERR usage: release IP"; fi ;;
     list)       list ;;
     flush)      flush ;;

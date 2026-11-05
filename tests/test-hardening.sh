@@ -123,6 +123,7 @@ for fw in fw-edge fw-dmz; do
 done
 x attacker pkill -f 'TCP-LISTEN:80,' >/dev/null 2>&1
 result H-05 "fw-edge reports its own blocked connection to the SIEM" yes "$(loki_has '{job="dmz", host="fw-edge", ident="ulogd"} | json | fw_rule="fw-edge output drop"' "$since")"
+result H-05 "fw-dmz reports its own blocked connection to the SIEM" yes "$(loki_has '{job="dmz", host="fw-dmz", ident="ulogd"} | json | fw_rule="fw-dmz output drop"' "$since")"
 sas=$(x fw-edge swanctl --list-sas 2>/dev/null)
 result H-05 "VPN still works: 2 IKE SAs established" 2 "$(printf '%s\n' "$sas" | grep -c 'ESTABLISHED')"
 result H-05 "SIEM channel K-13 still works" yes "$(has "$(x siem-responder respond status 2>/dev/null)" '^channel: +up')"

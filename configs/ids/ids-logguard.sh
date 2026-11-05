@@ -6,6 +6,7 @@ while true; do
     size=$(wc -c < "$f")
     if [ "$size" -gt "$limit" ]; then
       : > "$f"
+      pkill -HUP -f 'suricata --include'
       logger -t ids-logguard -p daemon.warning "truncated ${f} at ${size} bytes (limit ${limit})"
     fi
   done

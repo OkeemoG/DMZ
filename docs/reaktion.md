@@ -12,7 +12,7 @@ Die Umsetzung folgt genau dieser Aufteilung:
 |---|---|---|---|
 | Zugriffe unterbinden, verdächtige Verbindungen beenden | Sperre der Quelle an `fw-edge`, Löschen ihrer Verbindungen im Conntrack | automatisch (P-1, P-2, P-3) | RE-03, RE-04, RE-05, RE-08, A-1, A-2 |
 | Ausbreitung verhindern, infiziertes Endgerät isolieren | Quarantäne eines internen Hosts, unbefristet bis zur Freigabe | automatisch (P-4), Freigabe manuell | RE-06, A-3 |
-| Kommunikation mit dem Angreifer unterbinden | Sperre des Ziels einer verbotenen Verbindung aus der DMZ (Command and Control) | automatisch (P-5) | RE-07 |
+| Kommunikation mit dem Angreifer unterbinden | Sperre aller Verbindungen von innen zum Ziel einer verbotenen Verbindung aus der DMZ (Command and Control) | automatisch (P-5) | RE-07 |
 | Beweise sichern | `make evidence`: Ereignisse aus dem SIEM, Regelwerke mit Zählern, Verbindungen, Container-Logs, Integrität gegen das Image, SHA-256 | manuell nach Ablauf | Abschnitt Ablauf |
 | Sicheren Betrieb wiederherstellen, Schwachstelle schließen | `make recover`: alle Systeme aus den Images neu aufsetzen, Anwendung im sicheren Modus, Sperren bleiben bestehen | manuell nach Ablauf | Abschnitt Ablauf |
 | Sperren durch das SOC | `make block`, `make quarantine`, `make release`, `make response-mode` | manuell | RE-02, RE-12 |
@@ -64,7 +64,7 @@ Die Playbooks stehen als Daten in `configs/response/playbook.json`. Schwellen un
 | P-2 | IDS-Alarm auf der Strecke `waf` → `web` | 1 | Sperre 10 min | Der Alarm hinter der WAF heißt: Die Anfrage ist an der WAF vorbeigekommen. Höchste Dringlichkeit, keine Wartezeit. |
 | P-3 | Verworfene Pakete einer externen Quelle an `fw-edge` oder `fw-dmz` | 10 verschiedene Zielports in 20 s | Sperre 10 min | Typisches Muster eines Portscans. Ein gezielter, langsamer Scan (A-1 Stufe 1, 7 Ports) bleibt bewusst darunter und wird nur gemeldet. |
 | P-4 | Verworfene Pakete einer internen Quelle (Client-Netz, VPN) an interne Ziele | 3 verschiedene Ziele in 60 s | Quarantäne bis zur Freigabe | Seitwärtsbewegung eines kompromittierten Arbeitsplatzes. Ein isolierter Host bleibt isoliert, bis ihn jemand geprüft hat. |
-| P-5 | IDS-Alarm: Verbindungsaufbau aus der DMZ nach außen auf einem nicht freigegebenen Port (SID 1000003) | 1 | Sperre des Ziels 10 min | Ein Server, der eine Reverse Shell aufbauen will, ist vermutlich kompromittiert. Die Gegenstelle wird auch für TCP 80 und 443 gesperrt, die K-06 sonst erlaubt. |
+| P-5 | IDS-Alarm: Verbindungsaufbau aus der DMZ nach außen auf einem nicht freigegebenen Port (SID 1000003) | 1 | Verbindungen von innen zum Ziel 10 min sperren (`egress`) | Ein Server, der eine Reverse Shell aufbauen will, ist vermutlich kompromittiert. Die Gegenstelle wird auch für TCP 80 und 443 gesperrt, die K-06 sonst erlaubt, und zwar für das ganze Firmennetz. Verbindungen, die die Gegenstelle selbst aufbaut, bleiben erlaubt. Sonst könnte ein kompromittierter Server mit einem einzigen Paket beliebige Adressen vom Portal aussperren. |
 
 Weitere Regeln:
 
@@ -82,15 +82,17 @@ Weitere Regeln:
 |---|---|
 | Set `blocklist` | Gesperrte Adressen mit Ablaufzeit, höchstens 4096 |
 | Set `quarantine` | Isolierte interne Hosts, ohne oder mit Ablaufzeit, höchstens 256 |
-| Set `protected` | Adressen, die nie gesperrt werden: Transfernetze, DMZ, Backend, eigene Adresse, die beiden VPN-Gegenstellen |
-| Kette `prerouting`, Priorität `raw + 10` | Verwirft Pakete mit gesperrter Quelle oder gesperrtem Ziel |
+| Set `egress` | Ziele, zu denen von innen keine Verbindung mehr aufgebaut werden darf (P-5), mit Ablaufzeit, höchstens 1024 |
+| Set `protected` | Adressen, die nie gesperrt werden: Transfernetze, DMZ, Backend, das Gateway des Client-Netzes 10.10.20.1, eigene Adresse, die beiden VPN-Gegenstellen |
+| Kette `prerouting`, Priorität `raw + 10` | Verwirft Pakete mit gesperrter Quelle oder gesperrtem Ziel (`blocklist`, `quarantine`) |
+| Kette `forward`, Priorität `filter - 10` | Verwirft Pakete in Richtung eines `egress`-Ziels, aber nur in Verbindungen, die von innen aufgebaut wurden (`ct direction original`). Antworten auf Verbindungen der Gegenstelle laufen weiter. |
 | Ketten `blocked`, `quarantined` | Zählen und melden die verworfenen Pakete gedrosselt an das SIEM |
 
 Gründe für diese Form:
 
 - `fw-edge` ist der einzige Punkt, über den Internet, VPN, Client-Netz, DMZ und Backend miteinander sprechen. Eine Sperre dort wirkt für alle Wege.
 - Die Prüfung läuft vor Conntrack und vor der Adressumsetzung. Gesperrte Pakete erzeugen keinen Zustand und belasten die Verbindungstabelle nicht. Bestehende Verbindungen laufen sofort ins Leere, `fw-response` löscht sie zusätzlich aus dem Conntrack.
-- Die Sperre greift für Quelle und Ziel. Damit sperrt dasselbe Set einen Angreifer und einen Command-and-Control-Server.
+- `blocklist` greift für Quelle und Ziel und sperrt einen Angreifer vollständig. `egress` sperrt nur den Verbindungsaufbau von innen, also den Weg zu einem Command-and-Control-Server. Die Unterscheidung kam aus einem externen Review (2026-11-05). Vorher hätte P-5 jede Gegenstelle vollständig gesperrt.
 - Die Ablaufzeit verwaltet der Kernel. Fällt das SIEM aus, bleiben die Sperren bestehen und laufen trotzdem pünktlich ab.
 - `flush ruleset` beim Neuladen des Regelwerks leert die Sets. Der Responder gleicht seinen Stand alle 30 s mit `fw-edge` ab.
 
@@ -127,6 +129,8 @@ Eine automatische Sperre ist selbst ein Angriffsziel. Wer das System dazu bringt
 | Einzelne Fehlalarme | Schwellen und Zeitfenster, automatische Aufhebung nach Ablauf | RE-12 |
 | Flut von Ereignissen | Höchstens 30 Aktionen pro Minute, Set-Größen begrenzt | Code, `max_actions_per_minute` |
 | Fehlbedienung | Beobachtungsmodus, Freigabe jederzeit, Verlauf aller Aktionen | RE-11 |
+| Ein kompromittierter DMZ-Server löst P-5 gegen beliebige Adressen aus | P-5 sperrt nur Verbindungen von innen (`egress`), die Adresse erreicht das Portal weiter | RE-07 |
+| Ein Client fälscht die Adresse seines Gateways | 10.10.20.1 steht in der Schutzliste, `router-int` verwirft Pakete mit eigener Adresse als Absender ohnehin | RE-02 |
 
 ## Betrieb
 
@@ -135,6 +139,7 @@ Eine automatische Sperre ist selbst ein Angriffsziel. Wer das System dazu bringt
 | `make response-status` | Modus, Kanal zu `fw-edge`, aktive Sperren und Quarantänen, Wiederholungstäter, Zähler |
 | `make response-mode MODE=monitor` | Nur noch melden, nicht sperren. `MODE=enforce` schaltet zurück. |
 | `make block IP=192.0.2.50 TTL=600` | Adresse von Hand sperren |
+| `docker exec clab-dmz-siem-responder respond egress IP` | Nur Verbindungen von innen zu einer Adresse sperren |
 | `make quarantine IP=10.10.20.10` | Internen Host von Hand isolieren |
 | `make release IP=…` | Sperre oder Quarantäne aufheben |
 | `make evidence IP=… MINUTES=30` | Beweise sichern |
@@ -167,7 +172,7 @@ Die Schritte nach der automatischen Eindämmung erledigt der Operator.
 | RE-04 | Bestehende Verbindungen werden beendet |
 | RE-05 | P-3: Portscan gesperrt, Nachbar im selben Netz nicht |
 | RE-06 | P-4: Quarantäne ohne Ablauf, Freigabe |
-| RE-07 | P-5: Ziel gesperrt, auch für sonst erlaubtes TCP 443 |
+| RE-07 | P-5: Verbindungen von innen zum Ziel gesperrt, auch für sonst erlaubtes TCP 443 und aus dem Client-Netz. Die Gegenstelle selbst erreicht das Portal weiter. |
 | RE-08 | P-2: Alarm hinter der WAF sperrt sofort die ursprüngliche Quelle |
 | RE-09 | Gefälschter `X-Forwarded-For` vor dem Proxy führt nicht zur falschen Quelle |
 | RE-10 | Anti-Spoofing: gefälschter interner Absender aus dem Internet wird verworfen und löst keine Quarantäne aus |

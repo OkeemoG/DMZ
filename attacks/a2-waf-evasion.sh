@@ -57,6 +57,7 @@ stage "Coverage: ${blocked} of ${total} evasion attempts blocked by the WAF"
 
 code=$(inet curl -sk -o /dev/null -w '%{http_code}' -G --data-urlencode "q=' OR '1'='1" "https://${TARGET}/search?${RUN}-base" 2>/dev/null)
 check "baseline injection is blocked" 403 "403" "${code}"
+check "no evasion variant reached the application" 0 "0" "${#passed[@]}"
 
 if [ "${#passed[@]}" -gt 0 ]; then
   stage "Did the SIEM notice the requests that got through?"

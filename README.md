@@ -64,7 +64,7 @@ cd DMZ
 bash scripts/install.sh
 ```
 
-`install.sh` installiert `curl`, `make`, Docker und Containerlab 0.82.0 und nimmt den Benutzer in die Gruppen `docker` und `clab_admins` auf. Am Ende startet eine neue Anmeldung, damit die Gruppen gelten. Dabei fragt das System nach dem Passwort. Eine andere Containerlab-Version: `CLAB_VERSION=0.83.0 bash scripts/install.sh`.
+`install.sh` installiert `curl`, `make`, Docker und Containerlab 0.82.0 und nimmt den Benutzer in die Gruppen `docker` und `clab_admins` auf. Außerdem begrenzt es die Docker-Logs (`scripts/harden-host.sh`). Am Ende startet eine neue Anmeldung, damit die Gruppen gelten. Dabei fragt das System nach dem Passwort des Benutzers. Die neue Anmeldung beginnt im Home-Verzeichnis, danach also wieder `cd DMZ`. Eine andere Containerlab-Version: `CLAB_VERSION=0.83.0 bash scripts/install.sh`.
 
 Prüfen, ob Containerlab grundsätzlich läuft:
 
