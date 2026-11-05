@@ -1,19 +1,21 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-hardening test-response test-attacks test-all response-status response-mode block quarantine release evidence recover grafana-password host-hardening
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-hardening test-response test-attacks test-all response-status response-mode block quarantine release evidence recover grafana-password host-hardening secrets
 
 TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-hardening test-response test-attacks
 
 images:
 	bash scripts/build-images.sh
 
-pki: images
+secrets:
+	@bash scripts/gen-siem-secrets.sh
+
+pki: images secrets
 	bash scripts/gen-vpn-pki.sh
 	bash scripts/gen-response-keys.sh
-	bash scripts/gen-siem-secrets.sh
 
 deploy: images pki
 	containerlab deploy -t topology/dmz.clab.yml --reconfigure
 
-destroy:
+destroy: secrets
 	containerlab destroy -t topology/dmz.clab.yml --cleanup
 
 test-images:
