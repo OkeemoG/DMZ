@@ -70,7 +70,7 @@ Verfügbar sind 7,0 GB. Die Reserve beträgt mindestens 4,3 GB.
 | 2 Grundaufbau | Erledigt. 14 Knoten ohne Management-Netz, Adressen und Routen nach Adressplan (T-01 bis T-03), Rechte im Container (R-03). |
 | 3 Sicherheitssysteme | Firewalls nach Matrix 0.3, `proxy`, `web`, `waf` und `ids` erledigt und getestet. Offen: VPN (Schritt 4), in Arbeit. |
 | 4 Logging und SIEM | Erledigt. Fluent Bit, Loki und Grafana in drei Containern (E-09), alle vier Sensoren melden in unter 1 s (E-10, E-11), Normalisierung (E-14), Zugang über Out-of-Band-Netz (E-15), Dashboard „SOC – DMZ“ (E-16). Test `test-siem`. |
-| 5 Härtung (Stand 2026-11-05) | Umgesetzt, Test in der VM offen: Container ohne Privilegien, minimale Rechte, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Watchdog und Logbegrenzung, Proxy-Zeitlimits, Grafana-Passwort, Docker-Loglimits (`docs/haertung.md`, E-21, `test-hardening`). |
+| 5 Härtung (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Container ohne Privilegien, minimale Rechte, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Watchdog und Logbegrenzung, Proxy-Zeitlimits, Grafana-Passwort, Docker-Loglimits (`docs/haertung.md`, E-21, `test-hardening`). |
 | 7 bis 8 | Offen: schriftliche Dokumentation, Ablaufplan der Live-Demo. |
 | 6 Reaktion (Stand 2026-11-05) | Umgesetzt und in der VM getestet (`make test-all` bestanden): Responder mit Playbooks P-1 bis P-5, Sperren und Quarantäne an `fw-edge`, Kanal K-13, Anti-Spoofing, Beweissicherung, Wiederherstellung, Dashboard, Test `test-response`, A-1 bis A-3 mit Reaktion (`docs/reaktion.md`). |
 

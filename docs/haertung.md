@@ -1,6 +1,6 @@
 # Härtung der Sicherheitssysteme – DMZ-Laborumgebung
 
-Stand: 2026-11-05, Version 0.1, Phase 5. Anforderung der Aufgabenstellung: „Die Sicherheits-Systeme sind mittels Sicherheitsmaßnahmen gegenüber Angriffen gehärtet, deren Wirksamkeit überprüft wird.“
+Stand: 2026-11-05, Version 1.0, Phase 5. `make test-all` in der Labor-VM bestanden. Anforderung der Aufgabenstellung: „Die Sicherheits-Systeme sind mittels Sicherheitsmaßnahmen gegenüber Angriffen gehärtet, deren Wirksamkeit überprüft wird.“
 
 ## Vorgehen
 
