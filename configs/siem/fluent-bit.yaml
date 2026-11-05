@@ -16,7 +16,7 @@ parsers:
     regex: 'ModSecurity: Warning\. .*\[id "(?<rule_id>[0-9]+)"\].*?\[msg "(?<rule_msg>[^"]*)"\].*?\[tag "attack-(?<attack>[a-z-]+)"\].*\[uri "(?<uri>[^"]*)"\].*, client: (?<client>[0-9a-fA-F.:]+),'
   - name: fw-drop
     format: regex
-    regex: '^(?<fw_rule>[a-z-]+ (?:input|forward|block|quarantine|spoof) drop): IN=(?<in_if>\S*) OUT=(?<out_if>\S*) .*?SRC=(?<client>[0-9a-fA-F.:]+) DST=(?<dst>[0-9a-fA-F.:]+) .*?PROTO=(?<proto>[A-Z0-9]+)(?: SPT=(?<spt>[0-9]+) DPT=(?<dpt>[0-9]+))?'
+    regex: '^(?<fw_rule>[a-z-]+ (?:input|forward|block|quarantine|spoof) drop): +IN=(?<in_if>\S*) +OUT=(?<out_if>\S*) .*?SRC=(?<client>[0-9a-fA-F.:]+) DST=(?<dst>[0-9a-fA-F.:]+) .*?PROTO=(?<proto>[A-Z0-9]+)(?: SPT=(?<spt>[0-9]+) DPT=(?<dpt>[0-9]+))?'
 
 pipeline:
   inputs:
@@ -67,10 +67,17 @@ pipeline:
       reserve_data: on
       preserve_key: on
 
+    - name: nest
+      match: '*'
+      operation: lift
+      nested_under: alert
+      add_prefix: alert_
+
     - name: modify
       match: '*'
       condition: 'Key_Value_Matches src_ip ^10\.10\.10\.(2|6)$'
       copy:
+        - alert_xff client
         - xff client
 
     - name: modify

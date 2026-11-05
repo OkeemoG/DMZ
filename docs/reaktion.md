@@ -186,7 +186,13 @@ Vor der Labor-VM geprüft (2026-11-05):
 - Responder gegen `fw-response` mit allen fünf Playbooks, Beobachtungsmodus, Ablauf, Eskalation, Neustart mit Abgleich. Dauer der Aktion auf der Firewall dort 8 bis 16 ms.
 - Alle Abfragen des Dashboards gegen Loki 3.7.9.
 
-In der VM zu messen und hier einzutragen: Reaktionszeit RE-03 (Ziel unter 1 s), Speicher des Responders, Ergebnisse von `make test-all`.
+In der Labor-VM gemessen (2026-11-05, erster Lauf):
+
+- Reaktionszeit RE-03: 70 ms vom dritten geblockten Angriff bis zur wirksamen Sperre. Gemessen auf dem Angreifer, die erste Verbindung nach der Sperre läuft ins Leere. Ziel unter 1 s erfüllt.
+- Speicher des Responders: 16 MB von 64 MB.
+- Images: `fw` 27,1 MB, `responder` 52,6 MB.
+
+Der erste Lauf deckte zwei Formatänderungen auf, die die Zerlegung im Collector brachen: neuere ulogd-Version (zwei Leerzeichen nach dem Präfix) und `xff` bei Suricata 8 im Objekt `alert`. Davon hingen P-2 bis P-4 ab. Beides ist behoben und mit den echten Zeilen in Fluent Bit 5.1.5 geprüft. Der zweite Lauf von `make test-all` steht aus.
 
 ## Grenzen und mögliche Verbesserungen
 

@@ -162,3 +162,5 @@ Seit Phase 4 kommen `configs/siem` (Fluent Bit, Loki, Grafana, Dashboard) und `c
 | 13 | Suricata ohne Überwachung, `eve.json` unbegrenzt | Offen (E-08, R-05). Alarme gehen inzwischen ans SIEM, `eve.json` dient nur noch dem Test. |
 | 14 | Bau der Images über VPN bricht ab | Hinweis im README, vor dem Labortermin Images bauen (R-06). |
 | 15 | Nach dem VPN-Merge fehlten auf `fw-edge` das Bind für `ulogd.conf` und die Log-Regel der Input-Kette. `fw-edge` meldete keine verworfenen Pakete. | Behoben im Branch `response`. S-05 prüft es wieder. |
+| 16 | Beim Neubau des Images `fw` kam eine neuere ulogd-Version mit anderem Zeilenformat (`drop:  IN=`, `MARK=0x0`). Suricata 8 schreibt `xff` bei Alarmen in `alert`. Beides hat die Zerlegung im Collector gebrochen. | Behoben im Branch `response` (E-14). Gegen die echten Zeilen mit Fluent Bit 5.1.5 geprüft. |
+| 17 | Grafana 13.3 liefert die Startseite als virtuelles Dashboard `default-home-dashboard` aus der Datei und leitet dorthin um. | S-06 akzeptiert die Umleitung. |

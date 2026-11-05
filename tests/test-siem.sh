@@ -208,7 +208,7 @@ echo "== S-06 SOC dashboard"
 dash=$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/uid/dmz-soc 2>/dev/null)
 result S-06 "dashboard provisioned from configs/siem/dashboards" yes "$(has "$dash" '"uid": *"dmz-soc"')"
 result S-06 "dashboard refreshes every second" yes "$(has "$dash" '"refresh": *"1s"')"
-result S-06 "dashboard is the Grafana home page" yes "$(has "$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/home 2>/dev/null)" 'dmz-soc')"
+result S-06 "dashboard is the Grafana home page" yes "$(has "$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/home 2>/dev/null)" 'dmz-soc|/d/default-home-dashboard/soc-e28093-dmz')"
 stream='{job="dmz", ident=~"modsecurity|suricata|ulogd"} != "ModSecurity: Warning" | json | client!=""'
 result S-06 "alarm stream query returns events from waf, ids and firewalls" "fw-dmz fw-edge ids waf" "$(lines "sum by (host) (count_over_time(${stream} [10m]))" | grep -oE '"host":"[^"]+"' | cut -d'"' -f4 | sort -u | tr '\n' ' ' | sed 's/ $//')"
 

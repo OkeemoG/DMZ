@@ -92,8 +92,8 @@ if [ "${RESP}" = yes ]; then
     esac
   done
   echo "   ${sent} attempts: ${answered} answered (${reached} reached the app), ${dropped} dropped at fw-edge"
-  check "attacker locked out before the campaign was over" yes "$(listed blocklist 192.0.2.10)"
-  check "most variants never reached the proxy" yes "$([ "${dropped}" -ge $((sent / 2)) ] && echo yes || echo no)"
+  check "attacker locked out before the campaign was over" yes "yes" "$(listed blocklist 192.0.2.10)"
+  check "most variants never reached the proxy" yes "yes" "$([ "${dropped}" -ge $((sent / 2)) ] && echo yes || echo no)"
   echo "   Evasion needs many tries. After three blocked attempts (P-1) or one attack the IDS sees"
   echo "   behind the WAF (P-2) the attacker cannot try any further variants for 10 min."
 fi

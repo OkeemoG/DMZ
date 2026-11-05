@@ -52,13 +52,13 @@ web "scanner user agent"          -A "Nikto/2.5.0" "https://${TARGET}/?${RUN}-sc
 
 if [ "${RESP}" = yes ]; then
   stage "Stage 4  Automatic reaction (playbook P-1: 3 WAF blocks within 60 s)"
-  check "attacker blocked at fw-edge by the responder" yes "$(wait_listed blocklist 192.0.2.10)"
+  check "attacker blocked at fw-edge by the responder" yes "yes" "$(wait_listed blocklist 192.0.2.10)"
   respond list 2>/dev/null | grep -E '^blocklist 192\.0\.2\.10 ' | sed 's/^/   fw-edge: /'
   ms=$(reaction_ms block 192.0.2.10)
   echo "   reaction time from the event in the SIEM to the block on fw-edge: ${ms:-?} ms"
   code=$(inet curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 1 --max-time 2 "https://${TARGET}/?${RUN}-after" 2>/dev/null)
   check "even a harmless request of the attacker is dropped now" 000 "000" "${code}"
-  check "reaction visible in the SIEM" yes "$(siem_query '{job="dmz", ident="responder"} | json | action="block" | client="192.0.2.10"')"
+  check "reaction visible in the SIEM" yes "yes" "$(siem_query '{job="dmz", ident="responder"} | json | action="block" | client="192.0.2.10"')"
 fi
 
 stage "Outcome: the attacker reached no service and extracted no data."

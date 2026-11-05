@@ -234,9 +234,9 @@ echo "== RE-09 Attribution: forged X-Forwarded-For in front of the proxy is igno
 since=$(date +%s%N)
 x attacker curl -s -o /dev/null --max-time 3 -H "X-Forwarded-For: 10.10.20.10" \
   "http://203.0.113.2/search?q=1%20UNION%20SELECT%20name%20FROM%20users--&m=${RUN}-xff" >/dev/null 2>&1
-result RE-09 "IDS alert carries the forged header" yes "$(loki_has '{job="dmz", host="ids"} | json | xff="10.10.20.10"' "$since")"
-result RE-09 "collector names the real sender 192.0.2.10" yes "$(loki_has '{job="dmz", host="ids"} | json | xff="10.10.20.10" | client="192.0.2.10"' "$since" 3)"
-result RE-09 "collector does not name the forged 10.10.20.10" no "$(loki_has '{job="dmz", host="ids"} | json | xff="10.10.20.10" | client="10.10.20.10"' "$since" 3)"
+result RE-09 "IDS alert carries the forged header" yes "$(loki_has '{job="dmz", host="ids"} | json | alert_xff="10.10.20.10"' "$since")"
+result RE-09 "collector names the real sender 192.0.2.10" yes "$(loki_has '{job="dmz", host="ids"} | json | alert_xff="10.10.20.10" | client="192.0.2.10"' "$since" 3)"
+result RE-09 "collector does not name the forged 10.10.20.10" no "$(loki_has '{job="dmz", host="ids"} | json | alert_xff="10.10.20.10" | client="10.10.20.10"' "$since" 3)"
 clean
 
 echo "== RE-10 Anti-spoofing on fw-edge"

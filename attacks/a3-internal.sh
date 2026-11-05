@@ -32,18 +32,18 @@ blocked "into the backend / SIEM network (V-04)"           10.10.30.10 5140
 
 if [ "${RESP}" = yes ]; then
   stage "Stage 3  Automatic reaction (playbook P-4: 3 forbidden internal targets within 60 s)"
-  check "client1 isolated at fw-edge" yes "$(wait_listed quarantine 10.10.20.10)"
+  check "client1 isolated at fw-edge" yes "yes" "$(wait_listed quarantine 10.10.20.10)"
   respond list 2>/dev/null | grep -E '^quarantine 10\.10\.20\.10' | sed 's/^/   fw-edge: /'
   ms=$(reaction_ms quarantine 10.10.20.10)
   echo "   reaction time from the event in the SIEM to the quarantine on fw-edge: ${ms:-?} ms"
   check "client1 -> portal, normally allowed (K-04)" 000 "000" "$(icode --connect-timeout 1 --max-time 2 "https://${PROXY}/health?${RUN}-q")"
-  check "quarantine visible in the SIEM" yes "$(siem_query '{job="dmz", ident="responder"} | json | action="quarantine" | client="10.10.20.10"')"
+  check "quarantine visible in the SIEM" yes "yes" "$(siem_query '{job="dmz", ident="responder"} | json | action="quarantine" | client="10.10.20.10"')"
 
   stage "Stage 4  Release after cleanup (operator decision, no expiry)"
   echo "   An isolated host stays isolated until someone has checked or rebuilt it."
   echo "   Evidence first: make evidence IP=10.10.20.10, then: make release IP=10.10.20.10"
   respond release 10.10.20.10 >/dev/null 2>&1
-  check "after release client1 reaches the portal again" 200 "$(icode --max-time 3 "https://${PROXY}/health?${RUN}-r")"
+  check "after release client1 reaches the portal again" 200 "200" "$(icode --max-time 3 "https://${PROXY}/health?${RUN}-r")"
 fi
 
 stage "Outcome: the internal attacker is treated like any other."

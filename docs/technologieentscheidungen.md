@@ -22,8 +22,8 @@ Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Res
 | `siem-collector` | Fluent Bit | `fluent/fluent-bit:5.1.5` | gemessen 13 MB | 64 MB |
 | `siem-loki` | Loki | `grafana/loki:3.7.9` | gemessen 77–86 MB | 256 MB |
 | `siem-grafana` | Grafana | `grafana/grafana:13.3.0` | gemessen 316–350 MB | 512 MB |
-| `siem-responder` | Python, OpenSSH-Client | `responder` | 15–30 MB, Messung offen | 64 MB |
-| Summe, 18 Container | | | gemessen ca. 520 MB ohne Responder | 2240 MB |
+| `siem-responder` | Python, OpenSSH-Client | `responder` | gemessen 16 MB | 64 MB |
+| Summe, 18 Container | | | gemessen ca. 540 MB | 2240 MB |
 
 Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit `docker stats` und `free -m` im laufenden Betrieb: 2598 MB verfügbar, kein Swap genutzt.
 
@@ -31,14 +31,14 @@ Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit
 
 | Image | Basis | Inhalt | Größe |
 |---|---|---|---|
-| `fw` | `alpine:3.24` | iproute2, nftables, ulogd, tcpdump, strongSwan, OpenSSH-Server, conntrack-tools | 15,8 MB vor VPN und Reaktion, neu messen |
+| `fw` | `alpine:3.24` | iproute2, nftables, ulogd, tcpdump, strongSwan, OpenSSH-Server, conntrack-tools | 27,1 MB |
 | `router` | `alpine:3.24` | iproute2, tcpdump | 11,6 MB |
 | `client` | `alpine:3.24` | iproute2, curl, tcpdump, wireguard-tools, socat, openssl | 19,6 MB |
 | `proxy` | `nginx:1.28-alpine` | Nginx, selbst signiertes Zertifikat nach BSI TR-02102-2 | 70,4 MB |
 | `waf` | `owasp/modsecurity-crs:4.30.0-nginx-alpine` | Nginx, ModSecurity v3, CRS 4.30, iproute2 | 110 MB |
 | `web` | `python:3.12-alpine3.24` | Flask, gunicorn, eigene Anwendung | 58,2 MB |
 | `ids` | `alpine:3.24` | Suricata 8.0.8, iproute2 | 87,2 MB |
-| `responder` | `python:3.12-alpine3.24` | Responder, Befehl `respond`, OpenSSH-Client, su-exec. Teilt die Basisschichten mit `web`. | Messung offen |
+| `responder` | `python:3.12-alpine3.24` | Responder, Befehl `respond`, OpenSSH-Client, su-exec. Teilt die Basisschichten mit `web`. | 52,6 MB |
 | `fluent/fluent-bit:5.1.5`, `grafana/loki:3.7.9`, `grafana/grafana:13.3.0` | offiziell, unverändert | SIEM | nicht einzeln gemessen, alle Images zusammen 2,2 GB (`docker system df`, 2026-11-04) |
 | Summe eigene Images | | | 373 MB |
 
@@ -160,7 +160,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 ### E-14 Normalisierung im Collector
 
-- **Entscheidung:** Fluent Bit zerlegt die Meldungen beim Eingang in Felder (`configs/siem/fluent-bit.yaml`): Suricata-Alarme als JSON, WAF und Firewalls über die regulären Ausdrücke `waf-deny`, `waf-warn` und `fw-drop`. Die Herkunft heißt bei allen Sensoren `client`: bei der WAF die echte Client-Adresse, beim IDS `xff` nur für Alarme hinter dem Proxy (Absender `proxy` oder `waf`, dort setzt der Proxy den Header selbst), sonst `src_ip`, bei den Firewalls die Quelladresse. Seit 2026-11-05: Vorher übernahm der Collector `xff` auch vor dem Proxy, ein Angreifer konnte auf TCP 80 so eine fremde Adresse als Quelle angeben (RE-09). Die Originalmeldung bleibt erhalten.
+- **Entscheidung:** Fluent Bit zerlegt die Meldungen beim Eingang in Felder (`configs/siem/fluent-bit.yaml`): Suricata-Alarme als JSON, WAF und Firewalls über die regulären Ausdrücke `waf-deny`, `waf-warn` und `fw-drop`. Die Herkunft heißt bei allen Sensoren `client`: bei der WAF die echte Client-Adresse, beim IDS `xff` nur für Alarme hinter dem Proxy (Absender `proxy` oder `waf`, dort setzt der Proxy den Header selbst), sonst `src_ip`, bei den Firewalls die Quelladresse. Seit 2026-11-05: Vorher übernahm der Collector `xff` auch vor dem Proxy, ein Angreifer konnte auf TCP 80 so eine fremde Adresse als Quelle angeben (RE-09). Suricata 8 legt `xff` bei Alarmen in das Objekt `alert`. Der Filter `nest` hebt dieses Objekt auf die oberste Ebene (`alert_xff`, `alert_signature_id`, …), das sind dieselben Namen, die Loki beim Zerlegen erzeugt. Der Ausdruck `fw-drop` erlaubt seit der neueren ulogd-Version aus Alpine 3.24 mehrere Leerzeichen nach dem Präfix. Die Originalmeldung bleibt erhalten.
 - **Begründung:** Ein einheitliches Feld macht die Korrelation über Sensoren hinweg zu einer einfachen Abfrage („Top-Quellen“). Die Dashboard-Abfragen bleiben kurz und lesbar.
 - **Geprüft:** Die Ausdrücke wurden an allen echten Meldungen eines Testlaufs geprüft. Die Tests S-03 bis S-05 prüfen die Felder bei jedem Lauf.
 

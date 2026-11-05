@@ -33,6 +33,10 @@ def as_ip(value):
         return None
 
 
+def last_ip(value):
+    return as_ip(str(value or "").split(",")[-1])
+
+
 def parse_duration(text):
     return sum(int(v) * UNITS[u] for v, u in re.findall(r"(\d+)(ms|d|h|m|s)", text or ""))
 
@@ -109,13 +113,13 @@ def classify(rec, cfg):
         return [Signal("waf_block", ip, uri, f"WAF {rec.get('status')} {uri} score {rec.get('score', '?')}")]
     if ident == "suricata" and rec.get("event_type") == "alert":
         alert = rec.get("alert") if isinstance(rec.get("alert"), dict) else {}
-        sid = str(alert.get("signature_id", "?"))
-        sig = alert.get("signature", "?")
+        sid = str(rec.get("alert_signature_id", alert.get("signature_id", "?")))
+        sig = rec.get("alert_signature", alert.get("signature", "?"))
         src = as_ip(rec.get("src_ip"))
         dst = as_ip(rec.get("dest_ip"))
         port = rec.get("dest_port", "?")
         if src == cfg.waf and dst == cfg.web:
-            ip = as_ip(rec.get("client"))
+            ip = last_ip(rec.get("client"))
             if ip and ip != cfg.waf:
                 return [Signal("ids_behind_waf", ip, sid, f"IDS behind WAF: {sig}")]
             return []
