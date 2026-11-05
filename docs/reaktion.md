@@ -186,13 +186,19 @@ Vor der Labor-VM geprüft (2026-11-05):
 - Responder gegen `fw-response` mit allen fünf Playbooks, Beobachtungsmodus, Ablauf, Eskalation, Neustart mit Abgleich. Dauer der Aktion auf der Firewall dort 8 bis 16 ms.
 - Alle Abfragen des Dashboards gegen Loki 3.7.9.
 
-In der Labor-VM gemessen (2026-11-05, erster Lauf):
+In der Labor-VM gemessen (2026-11-05, `make destroy deploy test-all`, alle Tests bestanden):
 
-- Reaktionszeit RE-03: 70 ms vom dritten geblockten Angriff bis zur wirksamen Sperre. Gemessen auf dem Angreifer, die erste Verbindung nach der Sperre läuft ins Leere. Ziel unter 1 s erfüllt.
-- Speicher des Responders: 16 MB von 64 MB.
-- Images: `fw` 27,1 MB, `responder` 52,6 MB.
+| Messung | Wert |
+|---|---|
+| RE-03: dritter geblockter Angriff bis zur wirksamen Sperre, gemessen auf dem Angreifer | 70 ms (erster Lauf), 250 ms (zweiter Lauf). Ziel unter 1 s erfüllt. |
+| A-1: Ereignis im SIEM bis zur bestätigten Sperre auf `fw-edge` (P-1) | 278 ms |
+| A-3: Ereignis im SIEM bis zur bestätigten Quarantäne (P-4) | 143 ms |
+| A-1: Angriffe nach der Sperre | 2 von 5 Web-Angriffen erreichten den Proxy nicht mehr |
+| A-2 Teil 2: Evasion-Kampagne mit aktiver Reaktion | 3 von 16 Versuchen beantwortet, 13 an `fw-edge` verworfen |
+| Speicher `siem-responder` | 16 MB von 64 MB |
+| Images | `fw` 27,1 MB, `responder` 52,6 MB |
 
-Der erste Lauf deckte zwei Formatänderungen auf, die die Zerlegung im Collector brachen: neuere ulogd-Version (zwei Leerzeichen nach dem Präfix) und `xff` bei Suricata 8 im Objekt `alert`. Davon hingen P-2 bis P-4 ab. Beides ist behoben und mit den echten Zeilen in Fluent Bit 5.1.5 geprüft. Der zweite Lauf von `make test-all` steht aus.
+Der erste Lauf deckte zwei Formatänderungen auf, die die Zerlegung im Collector brachen: neuere ulogd-Version (zwei Leerzeichen nach dem Präfix) und `xff` bei Suricata 8 im Objekt `alert`. Davon hingen P-2 bis P-4 ab. Beides ist behoben (E-14) und im zweiten Lauf bestätigt.
 
 ## Grenzen und mögliche Verbesserungen
 

@@ -37,7 +37,7 @@ Die gesamte Umgebung läuft als 18 Docker-Container in einer VM und wird mit Con
 | `fw-backend` | Firewall des Backend-Netzes, lässt nur Meldungen an das SIEM durch | umgesetzt |
 | `siem` | SIEM im Backend: hält Adresse und Routen, einziger Knoten mit Management-Zugang | umgesetzt |
 | `siem-collector`, `siem-loki`, `siem-grafana` | Fluent Bit, Loki und Grafana im Netz von `siem` | umgesetzt |
-| `siem-responder` | Automatische Reaktion: wertet die Ereignisse aus und sperrt Angreifer an `fw-edge` | umgesetzt, Test in der VM offen |
+| `siem-responder` | Automatische Reaktion: wertet die Ereignisse aus und sperrt Angreifer an `fw-edge` | umgesetzt |
 
 Weg einer Anfrage aus dem Internet: `attacker` → `inet` → `fw-edge` (NAT auf 10.10.10.2) → `fw-dmz` → `proxy` → `fw-dmz` → `waf` → `fw-dmz` → `web`.
 
