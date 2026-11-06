@@ -51,6 +51,12 @@ loki_has() {
 
 uptime_cs() { cut -d' ' -f1 /proc/uptime | tr -d .; }
 
+side() { docker run --rm -i --network "container:${P}-$1" client:0.1 "${@:2}"; }
+
+counter_of() { x "$1" nft list chain inet filter "$2" 2>/dev/null | sed -n 's/.*counter packets \([0-9]*\) .*/\1/p' | tail -1; }
+
+suricata_pid() { x ids pgrep -f 'suricata --include' 2>/dev/null | head -1; }
+
 echo "== H-01 Containers without privileged mode, minimal capabilities"
 for n in "${ROUTER[@]}" "${DMZ[@]}" "${SIEM[@]}"; do
   result H-01 "$n not privileged" false "$(docker inspect -f '{{.HostConfig.Privileged}}' "${P}-$n" 2>/dev/null)"
@@ -63,7 +69,8 @@ done
 for n in "${SIEM[@]}"; do
   result H-01 "$n without NET_ADMIN" no "$(cap "$n" 12)"
 done
-result H-01 "ids keeps NET_RAW for the mirror port" yes "$(cap ids 13)"
+echo "   NET_RAW is a Docker default and stays in every container (containerlab offers no cap-drop)."
+echo "   It only matters for root inside a container; the services run without root (H-02)."
 echo "   still privileged on purpose: $(for n in inet attacker client1 ro-client1 ro-client2 siem; do [ "$(docker inspect -f '{{.HostConfig.Privileged}}' "${P}-$n" 2>/dev/null)" = true ] && printf '%s ' "$n"; done)"
 
 echo "== H-02 Services without root"
@@ -71,6 +78,15 @@ for n in waf siem-collector siem-loki siem-grafana siem-responder; do
   uid=$(status_of "$n" Uid)
   result H-02 "$n main process not root (uid ${uid:-?})" yes "$([ -n "$uid" ] && [ "$uid" != 0 ] && echo yes || echo no)"
 done
+sp=$(suricata_pid)
+su=$(x ids ps -o pid,user 2>/dev/null | awk -v p="${sp:-x}" '$1 == p { print $2 }')
+result H-02 "ids: suricata runs as user suricata" suricata "$su"
+if [ "$su" != suricata ]; then
+  echo "   last start errors (watchdog):"
+  x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query={job="dmz", ident="ids-watchdog"}' --data-urlencode limit=8 2>/dev/null \
+    | grep -oE 'suricata (exited|does not)[^"]*' | head -8 | sed 's/^/     /'
+fi
+result H-02 "ids: suricata holds only NET_ADMIN and NET_RAW" 0000000000003000 "$(x ids sh -c "awk '/^CapEff:/ { print \$2 }' /proc/${sp:-0}/status" 2>/dev/null)"
 w=$(x web ps -o user,args 2>/dev/null | grep -c '^app .*gunicorn')
 result H-02 "web: gunicorn workers as app" yes "$([ "${w:-0}" -ge 1 ] && echo yes || echo no)"
 w=$(x proxy ps -o user,args 2>/dev/null | grep -c '^nginx .*worker process')
@@ -99,6 +115,7 @@ done
 for n in "${DMZ[@]}"; do
   result H-04 "$n does not forward packets on eth1" 0 "$(sys "$n" net/ipv4/conf/eth1/forwarding)"
 done
+result H-04 "siem does not forward packets (management network stays a dead end)" 0 "$(sys siem net/ipv4/ip_forward)"
 result H-04 "ids mirror port eth2 without any address" "" "$(x ids ip -o addr show dev eth2 2>/dev/null)"
 result H-04 "fw-dmz mirror port eth6 without any address" "" "$(x fw-dmz ip -o addr show dev eth6 2>/dev/null)"
 for fw in fw-edge fw-dmz fw-backend; do
@@ -187,6 +204,36 @@ result H-09 "password file only readable by its owner" 600 "$(stat -c '%a' "$SEC
 result H-09 "password file excluded from git" yes "$(git -C "$(dirname "$0")/.." check-ignore -q configs/siem/secrets/grafana.env && echo yes || echo no)"
 hdr=$(x siem curl -sI http://127.0.0.1:3000/login 2>/dev/null)
 result H-09 "Grafana sends nosniff, frame and content security headers" "yes yes yes" "$(hasi "$hdr" '^x-content-type-options: nosniff') $(hasi "$hdr" '^x-frame-options: deny') $(hasi "$hdr" '^content-security-policy:')"
+
+echo "== H-10 Firewalls fail closed"
+for fw in fw-edge fw-dmz fw-backend; do
+  result H-10 "$fw: project rule set active, not the failsafe" "yes no" "$(has "$(x "$fw" nft list tables 2>/dev/null)" 'table inet filter') $(has "$(x "$fw" nft list tables 2>/dev/null)" 'table inet failsafe')"
+done
+fs=$(docker run --rm --network none --cap-add NET_ADMIN -v "$(cd "$(dirname "$0")/.." && pwd)/configs/fw/fw-start.sh:/fw-start.sh:ro" fw:0.1 \
+  sh -c 'echo "table inet filter { broken" > /tmp/bad.nft; sh /fw-start.sh /tmp/bad.nft >/dev/null 2>&1; echo "rc=$?"; nft list ruleset' 2>/dev/null)
+result H-10 "broken rule set: start script reports the error" yes "$(has "$fs" '^rc=1')"
+result H-10 "broken rule set: failsafe drops input, forward and output" 3 "$(printf '%s\n' "$fs" | grep -c 'policy drop;')"
+
+echo "== H-11 fw-dmz binds every DMZ address to its port (anti-spoofing)"
+x attacker pkill -f 'TCP-LISTEN:80,' >/dev/null 2>&1
+docker exec -d "${P}-attacker" socat TCP-LISTEN:80,fork,reuseaddr "SYSTEM:echo ok"
+sleep 0.5
+result H-11 "control: web -> 192.0.2.10 TCP 80 with its own address (K-06)" ok "$(side web socat -T2 - TCP:192.0.2.10:80,connect-timeout=2 </dev/null 2>/dev/null | tr -d '\r\n')"
+s0=$(counter_of fw-dmz spoofed)
+x web ip addr add 10.10.10.2/32 dev eth1 >/dev/null 2>&1
+r=$(side web socat -T2 - TCP:192.0.2.10:80,connect-timeout=2,bind=10.10.10.2 </dev/null 2>/dev/null | tr -d '\r\n')
+x web ip addr del 10.10.10.2/32 dev eth1 >/dev/null 2>&1
+s1=$(counter_of fw-dmz spoofed)
+result H-11 "web posing as proxy 10.10.10.2 -> 192.0.2.10 TCP 80" blocked "$([ "$r" = ok ] && echo reachable || echo blocked)"
+result H-11 "fw-dmz drops the forged sender (${s0:-?} -> ${s1:-?} packets)" yes "$([ "${s1:-0}" -gt "${s0:-0}" ] && echo yes || echo no)"
+x attacker pkill -f 'TCP-LISTEN:80,' >/dev/null 2>&1
+since=$(date +%s%N)
+msg="<134>$(date '+%b %e %H:%M:%S') ids suricata: {\"event_type\":\"alert\",\"src_ip\":\"10.10.10.10\",\"dest_ip\":\"192.0.2.55\",\"dest_port\":4444,\"alert\":{\"signature_id\":1000003,\"signature\":\"${RUN}\"}}"
+docker exec -u 0 "${P}-waf" ip addr add 10.10.10.14/32 dev eth1 >/dev/null 2>&1
+side waf socat -u - UDP-SENDTO:10.10.30.10:5140,bind=10.10.10.14 <<< "$msg" >/dev/null 2>&1
+docker exec -u 0 "${P}-waf" ip addr del 10.10.10.14/32 dev eth1 >/dev/null 2>&1
+result H-11 "waf posing as ids 10.10.10.14 does not reach the SIEM" no "$(loki_has "{job=\"dmz\"} |= \"${RUN}\"" "$since" 3)"
+result H-11 "forged sender reported by fw-dmz" yes "$(loki_has '{job="dmz", host="fw-dmz", ident="ulogd"} | json | fw_rule="fw-dmz spoof drop"' "$since")"
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-ids" "${P}-fw-edge" "${P}-proxy" 2>/dev/null

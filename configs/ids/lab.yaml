@@ -1,6 +1,6 @@
 %YAML 1.1
 ---
-# ids: Ergaenzung zu /etc/suricata/suricata.yaml aus dem Paket (Suricata 8.0.7), geladen mit --include.
+# ids: Ergaenzung zu /etc/suricata/suricata.yaml aus dem Paket (Suricata 8.0.8), geladen mit --include.
 # Jeder Abschnitt hier ersetzt den gleichnamigen Abschnitt der Standarddatei vollstaendig.
 
 af-packet:

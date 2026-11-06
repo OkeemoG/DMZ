@@ -7,6 +7,7 @@ RUN apk add --no-cache \
       tcpdump \
       strongswan \
       socat \
-      openssl
+      openssl \
+      nftables
 
 CMD ["sleep", "infinity"]

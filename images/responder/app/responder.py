@@ -14,8 +14,9 @@ IGNORED_IDENTS = {"responder", "fw-response", "sshd", "sshd-session", "dmztest"}
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 REASON_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,48}$")
 UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}
+SOURCE_RE = re.compile(r"^udp://([0-9.]+):[0-9]+$")
 
-Signal = collections.namedtuple("Signal", "kind subject key summary")
+Signal = collections.namedtuple("Signal", "kind subject key summary sid", defaults=(None,))
 SET_OF = {"block": "blocklist", "quarantine": "quarantine", "egress": "egress"}
 
 
@@ -36,6 +37,11 @@ def as_ip(value):
 
 def last_ip(value):
     return as_ip(str(value or "").split(",")[-1])
+
+
+def source_ip(rec):
+    m = SOURCE_RE.match(str(rec.get("src_addr", "")))
+    return as_ip(m.group(1)) if m else None
 
 
 def parse_duration(text):
@@ -68,6 +74,7 @@ class Playbook:
         self.window = float(data["window"])
         self.distinct = bool(data.get("distinct", False))
         self.action = data["action"]
+        self.sids = {str(s) for s in data.get("sids", [])}
 
 
 class Config:
@@ -88,6 +95,7 @@ class Config:
         self.internal = Nets(data["internal"])
         self.dmz = Nets(data["dmz"])
         self.private = Nets(data["private"])
+        self.sensors = {k: set(v) for k, v in data.get("sensors", {}).items()}
         self.block_seconds = int(data["block_seconds"])
         self.max_block_seconds = int(data["max_block_seconds"])
         self.escalation = float(data["escalation"])
@@ -125,7 +133,7 @@ def classify(rec, cfg):
                 return [Signal("ids_behind_waf", ip, sid, f"IDS behind WAF: {sig}")]
             return []
         if src and dst and src in cfg.dmz and dst not in cfg.private:
-            return [Signal("ids_egress", dst, f"{src}:{port}", f"IDS {src} -> {dst}:{port}: {sig}")]
+            return [Signal("ids_egress", dst, f"{src}:{port}", f"IDS {src} -> {dst}:{port}: {sig}", sid)]
         return []
     if ident == "ulogd" and rec.get("fw_rule"):
         rule = rec["fw_rule"]
@@ -137,7 +145,7 @@ def classify(rec, cfg):
             return []
         port = rec.get("dpt") or rec.get("proto", "?")
         if src in cfg.internal and dst and dst in cfg.private:
-            return [Signal("fw_drop_internal", src, f"{dst}:{port}", f"{rule} {src} -> {dst}:{port}")]
+            return [Signal("fw_drop_internal", src, dst, f"{rule} {src} -> {dst}:{port}")]
         if src not in cfg.private:
             return [Signal("fw_drop_external", src, str(port), f"{rule} {src} -> {dst}:{port}")]
     return []
@@ -282,6 +290,7 @@ class Responder:
         self.queue = asyncio.Queue()
         self.counters = collections.Counter()
         self.suppressed_at = 0.0
+        self.rejected_at = 0.0
 
     def channel_changed(self, up, reason):
         self.audit.emit("channel", result="up" if up else "down", reason=reason or None)
@@ -301,8 +310,24 @@ class Responder:
     def contained(self, ip):
         return ip in self.active or ip in self.pending or self.virtual.get(ip, 0) > now()
 
+    def sensor_ok(self, rec):
+        allowed = self.cfg.sensors.get(rec.get("ident", ""))
+        if allowed is None:
+            return True
+        src = source_ip(rec)
+        if src in allowed:
+            return True
+        self.counters["rejected"] += 1
+        t = now()
+        if t - self.rejected_at > 10:
+            self.rejected_at = t
+            self.audit.emit("rejected", sender=src or "unknown", result=f"{rec.get('ident')} message from a host that is not this sensor")
+        return False
+
     def ingest(self, rec):
         self.counters["events"] += 1
+        if not self.sensor_ok(rec):
+            return
         date = rec.get("date")
         t_event = float(date) if isinstance(date, (int, float)) else None
         if t_event is not None and not 0 <= now() - t_event < 60:
@@ -315,6 +340,8 @@ class Responder:
         t = now()
         for pb in self.cfg.playbooks:
             if pb.trigger != sig.kind or self.contained(sig.subject):
+                continue
+            if pb.sids and sig.sid not in pb.sids:
                 continue
             w = self.windows.setdefault((pb.id, sig.subject), collections.deque())
             w.append((t, sig.key, sig.summary))

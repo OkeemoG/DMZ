@@ -51,8 +51,10 @@ wait_listed() {
 }
 
 siem_query() {
+  local start=()
+  [ -n "${2:-}" ] && start=(--data-urlencode "start=$2")
   sleep 1
-  if docker exec "${P}-siem" curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" --data-urlencode limit=1 2>/dev/null | grep -q '"result":\[{'; then
+  if docker exec "${P}-siem" curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode "query=$1" "${start[@]}" --data-urlencode limit=1 2>/dev/null | grep -q '"result":\[{'; then
     echo yes
   else
     echo no
@@ -64,10 +66,10 @@ reaction_ms() {
 }
 
 check() {
-  if [ "$3" = "$4" ]; then
-    echo "   OK    $1 ($4)"
+  if [ "$2" = "$3" ]; then
+    echo "   OK    $1 ($3)"
   else
-    echo "   FAIL  $1 (expected: $3, got: $4)"
+    echo "   FAIL  $1 (expected: $2, got: $3)"
     fail=1
   fi
 }

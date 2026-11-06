@@ -201,6 +201,9 @@ clean
 
 echo "== RE-06 P-4 lateral movement: internal host quarantined"
 result RE-06 "control: client1 reaches the portal" 200 "$(portal client1 10.10.10.2)"
+for p in 8080 22 80; do reach client1 10.10.10.10 "$p" >/dev/null; done
+sleep 1
+result RE-06 "3 forbidden ports on one host: no quarantine (P-4 counts hosts)" no "$(active quarantine 10.10.20.10)"
 for t in 10.10.10.10:8080 10.10.10.6:8080 10.10.10.14:8080; do reach client1 "${t%:*}" "${t#*:}" >/dev/null; done
 result RE-06 "client1 quarantined after 3 forbidden internal targets" yes "$(wait_active quarantine 10.10.20.10)"
 result RE-06 "quarantine has no expiry (until an operator releases it)" no "$(has "$(entry quarantine 10.10.20.10)" 'timeout')"
@@ -293,6 +296,30 @@ echo "== RE-14 SOC dashboard shows the reaction"
 dash=$(x siem curl -s -u "admin:${PASS}" http://127.0.0.1:3000/api/dashboards/uid/dmz-soc 2>/dev/null)
 result RE-14 "panels mode, blocks, quarantine, channel, reaction time, reaction log" "6" "$(printf '%s' "$dash" | grep -oE '"title": *"(Reaktion: Modus|Gesperrte Adressen \(fw-edge\)|Isolierte interne Hosts|Kanal zu fw-edge|Letzte Reaktionszeit|Reaktionen \(neueste oben\))"' | sort -u | wc -l | tr -d ' ')"
 result RE-14 "heartbeat of the responder in Loki" yes "$(loki_has '{job="dmz", ident="responder"} | json | action="state"' "$(( ($(date +%s) - 30) * 1000000000 ))")"
+
+echo "== RE-15 Sensor binding: a compromised waf cannot pose as a firewall"
+since=$(date +%s%N)
+r0=$(respond status 2>/dev/null | sed -n 's/.*rejected: *\([0-9]*\).*/\1/p')
+for d in 10.10.10.10 10.10.10.6 10.10.10.14; do
+  printf '<134>%s fw-edge ulogd: fw-edge forward drop:  IN=eth3 OUT=eth2 MAC= SRC=10.10.20.10 DST=%s LEN=60 TOS=00 PREC=0x00 TTL=63 ID=1 DF PROTO=TCP SPT=40000 DPT=22 WINDOW=64240 RES=0x00 SYN URGP=0 %s\n' "$(date '+%b %e %H:%M:%S')" "$d" "${RUN}-spoof" \
+    | docker run --rm -i --network "container:${P}-waf" client:0.1 socat -u - UDP-SENDTO:10.10.30.10:5140 >/dev/null 2>&1
+done
+sleep 1.5
+r1=$(respond status 2>/dev/null | sed -n 's/.*rejected: *\([0-9]*\).*/\1/p')
+result RE-15 "3 forged firewall drops from waf: client1 not quarantined" no "$(active quarantine 10.10.20.10)"
+result RE-15 "responder rejects them (${r0:-?} -> ${r1:-?})" yes "$([ "${r1:-0}" -ge $(( ${r0:-0} + 3 )) ] && echo yes || echo no)"
+result RE-15 "SIEM labels them with the real sender waf" yes "$(loki_has "{job=\"dmz\", host=\"waf\", ident=\"ulogd\"} |= \"${RUN}-spoof\"" "$since")"
+result RE-15 "rejection reported in the SIEM" yes "$(loki_has '{job="dmz", ident="responder"} | json | action="rejected"' "$since")"
+clean
+
+echo "== RE-16 P-5 reacts only to its signatures (1000003, 1000007)"
+alert() { x ids logger -t suricata "{\"event_type\":\"alert\",\"src_ip\":\"10.10.10.10\",\"dest_ip\":\"$1\",\"dest_port\":443,\"proto\":\"TCP\",\"alert\":{\"signature_id\":$2,\"signature\":\"${RUN} test\"}}"; }
+alert 192.0.2.55 1000001
+sleep 1.5
+result RE-16 "IDS alert DMZ -> 192.0.2.55 with another signature (1000001): no block" no "$(active egress 192.0.2.55)"
+alert 192.0.2.56 1000007
+result RE-16 "IDS alert DMZ -> 192.0.2.56 with SID 1000007 (command output): blocked" yes "$(wait_active egress 192.0.2.56)"
+clean
 
 echo "== Resources"
 docker stats --no-stream --format '   {{.Name}}: {{.MemUsage}}' "${P}-siem-responder" 2>/dev/null
