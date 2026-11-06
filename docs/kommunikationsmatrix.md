@@ -8,8 +8,10 @@ Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 - Die Tabelle nennt den Verbindungsaufbau. Antworten auf bestehende Verbindungen sind erlaubt.
 - `fw-edge` und `fw-dmz` protokollieren verworfene Pakete und melden sie an das SIEM, höchstens 20 Meldungen pro Sekunde und Regelkette. Verworfen wird weiterhin alles, nur die Meldung ist gedrosselt, damit ein Angreifer das SIEM nicht fluten kann.
 - Kein DNS nur IP-Adressen
+- „Internet“ als Ziel (K-05, K-06) schließt alle privaten Netze nach RFC 1918 aus.
 - Reaktive Sperren und Quarantäne (`docs/reaktion.md`) gehen jeder Zeile vor: `fw-edge` verwirft Verkehr von und zu gesperrten Adressen vor allen anderen Regeln.
 - Anti-Spoofing auf `fw-edge`: Jede Schnittstelle nimmt nur Absender aus ihrem Netz an, das Internet keine internen oder reservierten Adressen außer im VPN-Tunnel.
+- Die Firewalls selbst senden nur, was die Tabelle verlangt: Meldungen an das SIEM (K-10, K-11), IKE und ESP an die VPN-Gegenstellen (K-07), Antworten und ICMP Echo zur Diagnose. Alles andere verwirft die Kette `output` (`docs/haertung.md`, H-05).
 
 ## Erlaubte Verbindungen
 

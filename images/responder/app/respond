@@ -12,6 +12,7 @@ USAGE = """usage: respond COMMAND [ARGS]
   status                          mode, firewall channel, active blocks, counters
   mode [enforce|monitor]          show or set the mode (monitor = detect and log only)
   block IP [SECONDS] [REASON]     block an address at fw-edge
+  egress IP [SECONDS] [REASON]    block only connections from inside to an address
   quarantine IP [SECONDS] [REASON] isolate an internal host (0 = until released)
   release IP                      lift a block or quarantine
   flush                           lift all blocks and quarantines
@@ -44,15 +45,15 @@ UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}
 def export_lines(lines):
     out = []
     for line in lines:
-        m = re.match(r"^(blocklist|quarantine) (\S+)(.*)$", line)
+        m = re.match(r"^(blocklist|quarantine|egress) (\S+)(.*)$", line)
         if not m:
             continue
         rest = m.group(3)
         expires = re.search(r"expires (\S+)", rest)
         comment = re.search(r'comment "([^"]*)"', rest)
         seconds = int(sum(int(v) * UNITS[u] for v, u in re.findall(r"(\d+)(ms|d|h|m|s)", expires.group(1)))) if expires else 0
-        kind = "block" if m.group(1) == "blocklist" else "quarantine"
-        if kind == "block" and seconds < 1:
+        kind = {"blocklist": "block", "quarantine": "quarantine", "egress": "egress"}[m.group(1)]
+        if kind != "quarantine" and seconds < 1:
             continue
         out.append(f"{kind} {m.group(2)} {seconds} {comment.group(1) if comment else 'operator'}")
     return out
@@ -79,7 +80,7 @@ def build(argv):
     req = {"cmd": cmd}
     if cmd == "mode" and args:
         req["value"] = args[0]
-    elif cmd in ("block", "quarantine"):
+    elif cmd in ("block", "quarantine", "egress"):
         if not args:
             return None
         req["ip"] = args[0]

@@ -1,18 +1,21 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-response test-attacks test-all response-status response-mode block quarantine release evidence recover
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-hardening test-response test-attacks test-all response-status response-mode block quarantine release evidence recover grafana-password host-hardening secrets
 
-TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-response test-attacks
+TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-hardening test-response test-attacks
 
 images:
 	bash scripts/build-images.sh
 
-pki: images
+secrets:
+	@bash scripts/gen-siem-secrets.sh
+
+pki: images secrets
 	bash scripts/gen-vpn-pki.sh
 	bash scripts/gen-response-keys.sh
 
 deploy: images pki
 	containerlab deploy -t topology/dmz.clab.yml --reconfigure
 
-destroy:
+destroy: secrets
 	containerlab destroy -t topology/dmz.clab.yml --cleanup
 
 test-images:
@@ -47,6 +50,9 @@ test-waf:
 test-siem:
 	bash tests/test-siem.sh
 
+test-hardening:
+	bash tests/test-hardening.sh
+
 test-response:
 	bash tests/test-response.sh
 
@@ -78,6 +84,12 @@ evidence:
 
 recover:
 	bash scripts/recover.sh
+
+grafana-password:
+	@sed -n 's/^GF_SECURITY_ADMIN_PASSWORD=//p' configs/siem/secrets/grafana.env
+
+host-hardening:
+	sudo bash scripts/harden-host.sh
 
 test-all:
 	@[ -n "$(TESTS)" ] || { echo "TESTS is empty"; exit 1; }

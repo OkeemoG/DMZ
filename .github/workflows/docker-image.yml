@@ -7,11 +7,13 @@ on:
 jobs:
   lab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - name: Containerlab installieren (gleiche Version wie auf der VM)
-        run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.79.0
+        run: bash -c "$(curl -sL https://get.containerlab.dev)" -- -v 0.82.0
+      - name: Docker-Logs begrenzen (wie make host-hardening)
+        run: sudo bash scripts/harden-host.sh --restart
       - name: Images bauen und Labor starten
         run: |
           make images pki
@@ -39,6 +41,18 @@ jobs:
       - name: test-vpn
         if: success() || failure()
         run: make test-vpn
+      - name: test-siem
+        if: success() || failure()
+        run: make test-siem
+      - name: test-hardening
+        if: success() || failure()
+        run: make test-hardening
+      - name: test-response
+        if: success() || failure()
+        run: make test-response
+      - name: test-attacks
+        if: success() || failure()
+        run: make test-attacks
       - name: Labor abbauen
         if: always()
         run: sudo containerlab destroy -t topology/dmz.clab.yml --cleanup

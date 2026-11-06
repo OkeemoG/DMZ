@@ -1,6 +1,6 @@
 # Adressplan – DMZ
 
-Stand: 2026-11-04, Version 0.3 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
+Stand: 2026-11-05, Version 0.4 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
 
 ## Regeln
 
@@ -30,7 +30,7 @@ Stand: 2026-11-04, Version 0.3 (passend zu `DMZ_Netzplan_0.2.drawio` und `topolo
 | Client-Netz | 10.10.20.0/24 | `router-int` – `client1` |
 | Backend-Netz | 10.10.30.0/24 | `fw-backend` – `siem` |
 | Management, nur `siem` | 172.20.20.0/24, Adresse von Docker vergeben | `siem` eth0 – VM, Port 3000 freigegeben |
-| VPN-Tunnel | 10.99.0.0/24 | `fw-edge` – `ro-client1`, `ro-client2` |
+| VPN, virtuelle Adressen | 10.99.0.2, 10.99.0.3 (Pools je Client) | `fw-edge` – `ro-client1`, `ro-client2`, richtlinienbasiertes IPsec ohne Tunnel-Schnittstelle |
 
 Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz ist als 10.10.0.0/16 zusammenfassbar.
 
@@ -46,9 +46,9 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `inet` | eth4 | 198.51.100.5/30 | `ro-client2` eth1 |
 | `attacker` | eth1 | 192.0.2.10/24 | `inet` eth3 |
 | `ro-client1` | eth1 | 198.51.100.2/30 | `inet` eth2 |
-| `ro-client1` | Tunnel | 10.99.0.2/24 | `fw-edge` Tunnel |
+| `ro-client1` | eth1, virtuelle Adresse | 10.99.0.2/32 | von `fw-edge` per IKEv2 zugewiesen |
 | `ro-client2` | eth1 | 198.51.100.6/30 | `inet` eth4 |
-| `ro-client2` | Tunnel | 10.99.0.3/24 | `fw-edge` Tunnel |
+| `ro-client2` | eth1, virtuelle Adresse | 10.99.0.3/32 | von `fw-edge` per IKEv2 zugewiesen |
 
 ### Firmennetz, Übergänge
 
@@ -58,7 +58,6 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `fw-edge` | eth2 | 10.10.0.1/30 | `fw-dmz` eth1 |
 | `fw-edge` | eth3 | 10.10.0.5/30 | `router-int` eth1 |
 | `fw-edge` | eth4 | 10.10.0.9/30 | `fw-backend` eth1 |
-| `fw-edge` | Tunnel | 10.99.0.1/24 | `ro-client1`, `ro-client2` Tunnel |
 
 ### DMZ
 
@@ -101,7 +100,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `inet` | keine Routen in 10.0.0.0/8 | – |
 | `ro-client1` | Standard | 198.51.100.1 |
 | `ro-client2` | Standard | 198.51.100.5 |
-| `ro-client1`, `ro-client2` | 10.10.0.0/16 | Tunnel (geplant) |
+| `ro-client1`, `ro-client2` | 10.10.0.0/16 | IPsec-Richtlinie zu `fw-edge`, Route in Tabelle 220 von strongSwan |
 | `fw-edge` | Standard | 203.0.113.1 |
 | `fw-edge` | 10.10.10.0/24 | 10.10.0.2 |
 | `fw-edge` | 10.10.20.0/24 | 10.10.0.6 |
@@ -114,7 +113,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | `siem` | Standard | 10.10.30.1 |
 | `siem` | Antworten von der eth0-Adresse | Gateway des Management-Netzes, eigene Tabelle 100 (`configs/siem/mgmt-routing.sh`) |
 
-Die Clients des Remote Office schicken nur Verkehr für das Firmennetz durch den Tunnel. Der übrige Verkehr geht direkt ins Internet. Das VPN ist noch nicht umgesetzt, die Tunnel-Adressen und -Routen sind geplant.
+Die Clients des Remote Office schicken nur Verkehr für das Firmennetz durch den Tunnel. Der übrige Verkehr geht direkt ins Internet (Test N-02). `fw-edge` hat keine Adresse im Bereich 10.99.0.0/24, die Zuordnung übernehmen die IPsec-Richtlinien.
 
 ## Adressumsetzung an `fw-edge`
 

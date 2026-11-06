@@ -16,6 +16,7 @@ REASON_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,48}$")
 UNITS = {"ms": 0.001, "s": 1, "m": 60, "h": 3600, "d": 86400}
 
 Signal = collections.namedtuple("Signal", "kind subject key summary")
+SET_OF = {"block": "blocklist", "quarantine": "quarantine", "egress": "egress"}
 
 
 def now():
@@ -143,7 +144,7 @@ def classify(rec, cfg):
 
 
 def parse_element(line):
-    m = re.match(r"^(blocklist|quarantine) (\S+)(.*)$", line)
+    m = re.match(r"^(blocklist|quarantine|egress) (\S+)(.*)$", line)
     if not m or not as_ip(m.group(2)):
         return None
     rest = m.group(3)
@@ -287,7 +288,7 @@ class Responder:
         self.emit_state()
 
     def emit_state(self):
-        blocks = sum(1 for e in self.active.values() if e["set"] == "blocklist")
+        blocks = sum(1 for e in self.active.values() if e["set"] != "quarantine")
         self.audit.emit(
             "state",
             mode=self.mode,
@@ -379,7 +380,7 @@ class Responder:
         auto = act["source"] == "auto"
         if "seconds" in act:
             seconds = act["seconds"]
-        elif kind == "block":
+        elif kind in ("block", "egress"):
             seconds = self.block_seconds(ip)
         else:
             seconds = self.cfg.quarantine_seconds
@@ -404,13 +405,13 @@ class Responder:
             return False, reply
         self.counters["actions"] += 1
         self.active[ip] = {
-            "set": "blocklist" if kind == "block" else "quarantine",
+            "set": SET_OF[kind],
             "expires": t_done + seconds if seconds else None,
             "reason": act["reason"],
             "since": t_done,
         }
         self.virtual.pop(ip, None)
-        if auto and kind == "block":
+        if auto and kind in ("block", "egress"):
             self.note_offense(ip)
         flows = re.search(r"flows=(\d+)", reply)
         self.audit.emit(
@@ -503,7 +504,7 @@ class Responder:
         if ip in self.cfg.protected:
             self.audit.emit("refused", client=ip, source="operator", result="protected")
             return None, {"ok": False, "error": f"protected {ip}"}
-        default = self.cfg.block_seconds if kind == "block" else self.cfg.quarantine_seconds
+        default = self.cfg.quarantine_seconds if kind == "quarantine" else self.cfg.block_seconds
         try:
             seconds = int(req.get("seconds", default))
         except (TypeError, ValueError):
@@ -549,7 +550,7 @@ class Responder:
                 self.audit.emit("mode", mode=value, source="operator")
                 self.emit_state()
             return {"ok": True, "mode": self.mode}
-        if cmd in ("block", "quarantine"):
+        if cmd in ("block", "quarantine", "egress"):
             act, err = self.operator_action(cmd, req)
             if err:
                 return err

@@ -5,3 +5,4 @@ clab-*/
 configs/vpn/pki/
 configs/response/keys/
 evidence/
+configs/siem/secrets/

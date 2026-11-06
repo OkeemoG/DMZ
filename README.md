@@ -64,7 +64,7 @@ cd DMZ
 bash scripts/install.sh
 ```
 
-`install.sh` installiert `curl`, `make`, Docker und Containerlab 0.82.0 und nimmt den Benutzer in die Gruppen `docker` und `clab_admins` auf. Am Ende startet eine neue Anmeldung, damit die Gruppen gelten. Dabei fragt das System nach dem Passwort. Eine andere Containerlab-Version: `CLAB_VERSION=0.83.0 bash scripts/install.sh`.
+`install.sh` installiert `curl`, `make`, Docker und Containerlab 0.82.0 und nimmt den Benutzer in die Gruppen `docker` und `clab_admins` auf. Außerdem begrenzt es die Docker-Logs (`scripts/harden-host.sh`). Am Ende startet eine neue Anmeldung, damit die Gruppen gelten. Dabei fragt das System nach dem Passwort des Benutzers. Die neue Anmeldung beginnt im Home-Verzeichnis, danach also wieder `cd DMZ`. Eine andere Containerlab-Version: `CLAB_VERSION=0.83.0 bash scripts/install.sh`.
 
 Prüfen, ob Containerlab grundsätzlich läuft:
 
@@ -77,7 +77,8 @@ make test-basic
 | Befehl | Wirkung |
 |---|---|
 | `make images` | Baut alle Images |
-| `make pki` | Erzeugt die Zertifikate und Schlüssel für das VPN in `configs/vpn/pki/` und die SSH-Schlüssel für K-13 in `configs/response/keys/`, falls noch nicht vorhanden |
+| `make pki` | Erzeugt die Zertifikate und Schlüssel für das VPN in `configs/vpn/pki/`, die SSH-Schlüssel für K-13 in `configs/response/keys/` und das Grafana-Passwort in `configs/siem/secrets/`, falls noch nicht vorhanden |
+| `make host-hardening` | Begrenzt die Docker-Logs auf dem Host (einmalig, `sudo`, danach `sudo systemctl restart docker` und `make deploy`). `install.sh` erledigt das bei einer neuen Installation. |
 | `make deploy` | Baut die Images, erzeugt bei Bedarf die PKI und startet die Topologie neu |
 | `make destroy` | Stoppt die Topologie und räumt auf |
 | `make test-all` | Führt alle Tests aus und meldet am Ende `ALL TESTS PASSED` oder die fehlgeschlagenen Tests |
@@ -112,7 +113,7 @@ Grafana lauscht auf Port 3000 der VM.
 | Browser auf dem Host der VM (Bridge- oder Host-only-Netz) | `http://<IP der VM>:3000`, die IP zeigt `ip -4 -br addr` |
 | Host bei NAT-Netz der VM | Portweiterleitung Host 3000 → Gast 3000 oder `ssh -L 3000:localhost:3000 <benutzer>@<VM>` |
 
-Anmeldung mit `admin` und dem Passwort aus `GRAFANA_PASSWORD`, Standard `dmz-soc`. Ein anderes Passwort: `GRAFANA_PASSWORD=… make deploy`.
+Anmeldung mit `admin` und dem Passwort, das `make pki` bzw. `make deploy` zufällig erzeugt. Anzeigen: `make grafana-password`. Ein anderes Passwort: `configs/siem/secrets/grafana.env` ändern und `make deploy`.
 
 Nach der Anmeldung erscheint das Dashboard „SOC – DMZ“. Es aktualisiert sich jede Sekunde. Der Link „Alarm-Stream live“ oben öffnet dieselbe Alarm-Abfrage in Explore, dort oben rechts auf **Live** klicken.
 
@@ -138,8 +139,9 @@ docker exec clab-dmz-client1 curl -sk -G --data-urlencode "file=../../etc/passwd
 | `make test-siem` | SIEM-Dienste, Zugang, Latenz bis zum SIEM, Meldungen von WAF, IDS und Firewalls mit Feldern, Dashboard |
 | `make test-web` | Webanwendung in beiden Betriebsarten, eigene Container außerhalb der Topologie |
 | `make test-vpn` | Tunnel und Verfahren nach BSI TR-02102-3, Zugriff über den Tunnel, Sperren, Abweisung unzulässiger Verfahren, PKI |
+| `make test-hardening` | Härtung: Container ohne Privilegien und mit minimalen Rechten, Ausbruchsversuche, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Neustart und Logbegrenzung, Docker-Loglimits, Slowloris, Grafana-Zugang (`docs/haertung.md`) |
 | `make test-response` | Automatische Reaktion: Kanal K-13 nach BSI TR-02102-4, Schutzliste, alle Playbooks, Reaktionszeit unter 1 s, Anti-Spoofing, Beobachtungsmodus, Ablauf, Neustart, Dashboard |
-| `make test-attacks` | Die drei Angriffe A-1 bis A-3 mit Selbstprüfung (`attacks/README.md`) |
+| `make test-attacks` | Die vier Angriffe A-1 bis A-4 mit Selbstprüfung (`attacks/README.md`) |
 
 Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie voraus (`make deploy`). Die Tests der einzelnen Schichten schalten die automatische Reaktion für ihre Dauer in den Beobachtungsmodus und heben vorhandene Sperren auf, damit ihre Angriffe den Angreifer nicht für die folgenden Tests aussperren.
 
@@ -152,9 +154,10 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 | `configs/` | Konfiguration je Knoten: Firewall-Regeln, Proxy, WAF, IDS, VPN |
 | `configs/vpn/pki/` | Labor-PKI des VPN, erzeugt von `make pki`, nicht im Repo |
 | `configs/response/` | Playbooks, `fw-response` und `sshd` für K-13. `keys/` erzeugt `make pki`, nicht im Repo |
-| `attacks/` | Angriffe A-1 bis A-3 |
+| `attacks/` | Angriffe A-1 bis A-4 |
 | `evidence/` | Gesicherte Beweise von `make evidence`, nicht im Repo |
-| `scripts/` | `install.sh`, `build-images.sh`, `gen-vpn-pki.sh`, `gen-response-keys.sh`, `collect-evidence.sh`, `recover.sh` |
+| `scripts/` | `install.sh`, `harden-host.sh`, `build-images.sh`, `gen-vpn-pki.sh`, `gen-response-keys.sh`, `gen-siem-secrets.sh`, `collect-evidence.sh`, `recover.sh` |
+| `configs/siem/secrets/` | Grafana-Passwort, erzeugt von `make pki`, nicht im Repo |
 | `tests/` | Ein Testskript je Thema |
 | `docs/` | Aufgabenstellung, Planung, Netzpläne |
 | `docs/quellen/` | BSI TR-02102-1, TR-02102-2 und TR-02102-3 |
@@ -177,3 +180,6 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 | `make response-status` zeigt `channel:  down` | `sshd` auf `fw-edge` läuft nicht oder die Schlüssel passen nicht zusammen | `docker logs clab-dmz-siem-responder`, `docker exec clab-dmz-fw-edge pgrep -fa sshd`. Nach neu erzeugten Schlüsseln `make deploy` |
 | Angriffe oder Tests laufen ins Leere, Verbindungen vom `attacker` hängen | Der Angreifer ist noch von einem früheren Angriff gesperrt | `make response-status`, dann `make release IP=192.0.2.10`. Die Testskripte heben Sperren selbst auf |
 | `test-response` RE-03 meldet mehr als 1000 ms | Last auf der VM, z. B. durch den Bau von Images | Test wiederholen, Messwert in `docs/reaktion.md` eintragen |
+| `test-hardening` H-07 meldet Logs ohne Größengrenze | Docker-Loglimits auf dem Host noch nicht gesetzt | `make destroy`, `make host-hardening`, `sudo systemctl restart docker`, `make deploy` |
+| `containerlab deploy` meldet eine fehlende Datei `configs/siem/secrets/grafana.env` | Grafana-Passwort noch nicht erzeugt | `make pki` oder `make deploy` |
+| Anmeldung an Grafana mit `dmz-soc` scheitert | Seit Phase 5 gibt es ein erzeugtes Passwort | `make grafana-password` |

@@ -13,7 +13,7 @@ Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Res
 | `fw-backend` | nftables | `fw` | 5–15 MB | 64 MB |
 | `router-int`, `inet` | Linux-Routing mit statischen Routen | `router` | je 5–10 MB | je 64 MB |
 | `client1`, `attacker` | curl, socat, openssl | `client` | je 5–15 MB | je 64 MB |
-| `ro-client1`, `ro-client2` | curl, WireGuard | `client` | je 5–15 MB | je 64 MB |
+| `ro-client1`, `ro-client2` | curl, strongSwan | `client` | je 5–15 MB | je 64 MB |
 | `proxy` | Nginx | `proxy` | 10–30 MB | 64 MB |
 | `waf` | Nginx, ModSecurity v3, OWASP CRS 4 | `waf` | 60–150 MB | 256 MB |
 | `web` | Python, Flask, gunicorn, SQLite | `web` | 30–80 MB | 128 MB |
@@ -33,7 +33,7 @@ Verfügbar sind 3423 MB RAM (Messung vom 2026-10-07). Gemessen am 2026-11-04 mit
 |---|---|---|---|
 | `fw` | `alpine:3.24` | iproute2, nftables, ulogd, tcpdump, strongSwan, OpenSSH-Server, conntrack-tools | 27,1 MB |
 | `router` | `alpine:3.24` | iproute2, tcpdump | 11,6 MB |
-| `client` | `alpine:3.24` | iproute2, curl, tcpdump, wireguard-tools, socat, openssl | 19,6 MB |
+| `client` | `alpine:3.24` | iproute2, curl, tcpdump, strongSwan, socat, openssl | 24,2 MB |
 | `proxy` | `nginx:1.28-alpine` | Nginx, selbst signiertes Zertifikat nach BSI TR-02102-2 | 70,4 MB |
 | `waf` | `owasp/modsecurity-crs:4.30.0-nginx-alpine` | Nginx, ModSecurity v3, CRS 4.30, iproute2 | 110 MB |
 | `web` | `python:3.12-alpine3.24` | Flask, gunicorn, eigene Anwendung | 58,2 MB |
@@ -69,12 +69,13 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Abweichung:** Der Stack-Vorschlag des Projekts nennt FRR.
 - **Anforderung:** NET-02.
 
-### E-04 VPN mit WireGuard
+### E-04 VPN mit IKEv2/IPsec (strongSwan)
 
-- **Entscheidung:** WireGuard zwischen den beiden Clients des Remote Office und `fw-edge`, UDP 51820. Jeder Client hat einen eigenen Schlüssel und einen eigenen Tunnel.
-- **Begründung:** Im Linux-Kernel enthalten, kein eigener Dienst im Container, Konfiguration mit wenigen Zeilen.
-- **Alternativen:** OpenVPN (eigener Dienst, Zertifikate). IPsec mit strongSwan (aufwendigste Konfiguration).
-- **Geprüft:** Eine WireGuard-Schnittstelle lässt sich im Container anlegen (Test R-03). Auf der Labor-VM der DHBW noch zu prüfen.
+- **Entscheidung:** IKEv2/IPsec mit strongSwan zwischen den beiden Clients des Remote Office und `fw-edge` (UDP 500, ESP). Verfahren nach BSI TR-02102-3: AES-256-GCM, PRF HMAC-SHA2-512, brainpoolP512r1, Authentisierung mit Zertifikaten aus einer eigenen Labor-PKI (`make pki`), kein Pre-Shared Key. Richtlinienbasiertes IPsec ohne Tunnel-Schnittstelle: Jeder Client erhält eine feste virtuelle Adresse (10.99.0.2, 10.99.0.3) und schickt nur 10.10.0.0/16 durch den Tunnel. Konfiguration: `configs/vpn/`.
+- **Begründung:** BSI TR-02102-3 beschreibt IKEv2 und IPsec mit konkreten Verfahren und Mindestanforderungen. Damit lässt sich die Konfiguration nach dem Stand der Technik belegen und testen (N-00 bis N-10).
+- **Ursprünglicher Plan:** WireGuard (UDP 51820). Verworfen, weil WireGuard fest Curve25519 und ChaCha20-Poly1305 nutzt. Beide stehen nicht in TR-02102-3, und die Verfahren lassen sich nicht anpassen. Test N-09 belegt, dass `fw-edge` genau diese Verfahren abweist.
+- **Alternativen:** WireGuard (siehe oben). OpenVPN (eigenes Protokoll auf TLS-Basis, nicht in TR-02102-3).
+- **Geprüft:** `test-vpn` (N-00 bis N-10), XFRM im Container (R-03), ohne Privilegien (H-05).
 - **Anforderung:** NET-05.
 
 ### E-05 Reverse-Proxy mit Nginx
@@ -110,7 +111,8 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Geprüft:** Alpine 3.24 enthält Suricata 8.0.8 (Test I-00). Alpine 3.20 enthielt nur 7.0.7.
 - **Spiegelung:** `tc` kopiert alle eingehenden Pakete von `fw-dmz` eth1 bis eth4 vor der Filterung nach eth6. Das IDS sieht damit auch Pakete, die `fw-dmz` verwirft (Test I-05).
 - **Folge:** Anfragen, die die WAF durchlässt, sieht das IDS zweimal: auf dem Weg `proxy` → `waf` und auf dem Weg `waf` → `web`. Ein Alarm auf dem zweiten Weg (Quelle 10.10.10.6) zeigt, dass ein Angriff die WAF passiert hat. Das SIEM muss die Dopplung beim Zählen berücksichtigen.
-- **Grenze:** Suricata läuft ohne Überwachung (`-D`) und `eve.json` wächst ohne Begrenzung. Beides wird mit dem Meldeweg in Phase 4 gelöst.
+- **Netze:** `HOME_NET` ist die DMZ 10.10.10.0/24 (`configs/ids/lab.yaml`, Abschnitt `vars`). Damit gilt für SID 1000003 auch ein Verbindungsaufbau aus der DMZ ins Client- oder Backend-Netz als Verbindung nach außen. Vorher galt der Standard von Suricata (alle privaten Netze). Weil `--include` gleichnamige Abschnitte vollständig ersetzt, enthält `lab.yaml` den ganzen Abschnitt `vars` aus Suricata 8.0.8.
+- **Betrieb:** Seit Phase 5 überwacht ein Watchdog Suricata, die Logdateien sind auf 50 MB begrenzt (H-06).
 - **Anforderungen:** SYS-03, SEC-03, MON-01.
 
 ### E-09 SIEM mit Grafana und Loki
@@ -118,7 +120,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** Fluent Bit nimmt die Meldungen an, Loki speichert und durchsucht sie, Grafana zeigt das Dashboard. Jeder Dienst läuft in einem eigenen Container mit unverändertem offiziellem Image. Alle drei teilen sich das Netz des Knotens `siem` (`network-mode: container:siem`), wie die Container eines Pods in Kubernetes. `siem` selbst hält nur Adressen und Routen.
 - **Begründung:** Passt in das Speicherbudget. Der Wazuh-Indexer verlangt mindestens 4 GB RAM und scheidet damit aus. Elasticsearch und Graylog liegen in derselben Größenordnung. Getrennte Container erlauben eine Speichergrenze je Dienst und brauchen keine Prozessverwaltung. Adressplan und Firewall-Regeln bleiben unverändert, weil alle Dienste unter 10.10.30.10 erreichbar sind und sich über `localhost` ansprechen.
 - **Abweichung vom Entwurf:** Das gemeinsame Image `lab-siem` entfällt, damit auch Risiko R-02.
-- **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, Admin-Passwort über `GRAFANA_PASSWORD`, ohne Verbindungen ins Internet.
+- **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, ohne Verbindungen ins Internet. Seit Phase 5 mit erzeugtem Admin-Passwort und weiteren Maßnahmen (E-21, `docs/haertung.md`).
 - **Grenze:** Grafana mit Loki ist eine Log-Plattform mit Abfragen und Dashboards, kein vollständiges SIEM. Es fehlen fertige Korrelationsregeln und Fallbearbeitung. Die Korrelation über das Feld `client` (E-14) ist ein einfacher Ersatz. Die Grenze gehört in das Fazit der Dokumentation.
 - **Anforderungen:** SYS-07, MON-02, MON-03, MON-05.
 
@@ -203,15 +205,23 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** `scripts/collect-evidence.sh` (`make evidence`) sichert Ereignisse, Zustände, Logs und Container-Änderungen mit Prüfsummen. `scripts/recover.sh` (`make recover`) sichert Beweise, setzt alle Systeme aus den Images neu auf und trägt die Sperren wieder ein.
 - **Begründung:** Die Vorlesung verlangt nach der Eindämmung Beweissicherung und die Wiederherstellung des sicheren Betriebs nach festgelegten Abläufen. Skripte machen den Ablauf wiederholbar und verhindern, dass Beweise beim Neuaufbau verloren gehen.
 
+### E-21 Härtung nach dem Prinzip der minimalen Rechte
+
+- **Entscheidung:** Firewalls, Router, DMZ-Server und SIEM-Dienste laufen nicht mehr privilegiert, sondern mit genau den nötigen Zusatzrechten (`NET_ADMIN`, beim IDS `NET_RAW`) und `no-new-privileges`, gebündelt über die Gruppen `router`, `dmz` und `siem` in der Topologie. Dazu Kernel-Einstellungen gegen Redirects und Source-Routing, Spiegelports ohne IPv6-Adresse, Output-Ketten mit `policy drop` auf den Firewalls, Watchdog und Logbegrenzung für Suricata, Zeitlimits im Proxy, erzeugtes Grafana-Passwort, Docker-Loglimits auf dem Host. Einzelheiten und Tests: `docs/haertung.md`.
+- **Begründung:** Containerlab startet Knoten standardmäßig privilegiert. Damit wäre jede Codeausführung in einem DMZ-Server ein Zugriff auf den Host. Minimale Rechte begrenzen den Schaden eines erfolgreichen Angriffs (Defense in Depth hinter WAF und Firewall).
+- **Alternativen:** Schreibgeschütztes Dateisystem und `cap-drop` (von Containerlab nicht angeboten). Adressen von außen über einen Hilfscontainer setzen, damit die DMZ-Server ohne `NET_ADMIN` auskommen (Containerlab sieht das nicht vor, Ablauf würde unübersichtlich). User-Namespace-Remapping für Docker (Umstellung des Hosts).
+- **Geprüft:** `make test-hardening`, H-01 bis H-09. Vorab: Regelwerke mit nftables, Proxy-Konfiguration und Slowloris mit Nginx 1.28.
+- **Anforderungen:** Aufgabenstellung „gehärtet … Wirksamkeit überprüft“, Phase 5. Eine ID in der Anforderungsliste nachtragen.
+
 ## Risiken und Prüfungen
 
 | Nr. | Risiko | Prüfung |
 |---|---|---|
 | R-01 | Die Anzeige im Dashboard dauert länger als 1 s. | Erledigt: Transport bis Loki gemessen 50 bis 650 ms (S-02 bis S-05), `min_refresh_interval` auf 1 s, Live-Ansicht für die garantierte Vorgabe (E-16). |
 | R-02 | Das gemeinsame Image `lab-siem` mit drei Diensten lässt sich nicht sauber bauen. | Entfällt: drei Container mit offiziellen Images (E-09). |
-| R-03 | nftables, tc und WireGuard brauchen erweiterte Rechte im Container. | Erledigt: Test R-03 in `test-topology` bestanden. |
+| R-03 | nftables, tc und XFRM (IPsec) brauchen erweiterte Rechte im Container. | Erledigt: Test R-03 in `test-topology` bestanden, seit Phase 5 mit `NET_ADMIN` statt Privilegien (H-01). |
 | R-04 | Suricata belegt mehr RAM als geschätzt. | Erledigt: gemessen 37 MB, Grenze auf 256 MB gesenkt. |
-| R-05 | Logs füllen die Disk. | Loki speichert 24 h. Offen: `eve.json` und Container-Logs begrenzen. |
+| R-05 | Logs füllen die Disk. | Loki speichert 24 h. Suricata-Logs über 50 MB werden geleert (H-06), Docker-Logs je Container höchstens 3 × 10 MB (H-07). |
 | R-06 | Der Bau der Images bricht über ein VPN ab (`I/O error` bei `apk`), weil das VPN die MTU verkleinert. | Images ohne VPN bauen oder die MTU von Docker anpassen. Vor dem Labortermin alle Images bauen. Hinweis im README. |
 | R-07 | Grafana erreicht seine Speichergrenze und wird vom Kernel beendet. | Gemessen bis 349 MB, Grenze von 384 auf 512 MB erhöht. Test S-00 prüft auf Abbruch wegen Speichermangel. |
 | R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. Das Image `responder` teilt die Basis mit `web`. |

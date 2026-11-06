@@ -632,7 +632,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", latency_ms=\"latency_ms\" | action=~\"block|quarantine\" | latency_ms!=\"\" | drop action | unwrap latency_ms [$__range]))",
+          "expr": "max(last_over_time({job=\"dmz\", ident=\"responder\"} | json action=\"action\", latency_ms=\"latency_ms\" | action=~\"block|quarantine|egress\" | latency_ms!=\"\" | drop action | unwrap latency_ms [$__range]))",
           "queryType": "range"
         }
       ],
@@ -1093,10 +1093,10 @@
         },
         "enable": true,
         "iconColor": "red",
-        "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|release\"",
+        "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|egress|release\"",
         "target": {
           "refId": "Anno",
-          "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|release\""
+          "expr": "{job=\"dmz\", ident=\"responder\"} | json action=\"action\" | action=~\"block|quarantine|egress|release\""
         },
         "titleFormat": "Reaktion",
         "textFormat": "{{action}} {{client}} {{playbook}}",
