@@ -34,7 +34,7 @@ Die gesamte Umgebung läuft als 18 Docker-Container in einer VM und wird mit Con
 | `ids` | Suricata 8 am Spiegelport von `fw-dmz` | umgesetzt |
 | `router-int` | Router zum Client-Netz | umgesetzt |
 | `client1` | interner Client | umgesetzt |
-| `fw-backend` | Firewall des Backend-Netzes, lässt nur Meldungen an das SIEM durch | umgesetzt |
+| `fw-backend` | Firewall des Backend-Netzes, lässt nur Meldungen an das SIEM hinein und nur den Reaktionskanal K-13 hinaus | umgesetzt |
 | `siem` | SIEM im Backend: hält Adresse und Routen, einziger Knoten mit Management-Zugang | umgesetzt |
 | `siem-collector`, `siem-loki`, `siem-grafana` | Fluent Bit, Loki und Grafana im Netz von `siem` | umgesetzt |
 | `siem-responder` | Automatische Reaktion: wertet die Ereignisse aus und sperrt Angreifer an `fw-edge` | umgesetzt |
@@ -52,7 +52,7 @@ Planung und Begründungen: [`docs/adressplan.md`](docs/adressplan.md), [`docs/ko
 | Punkt | Wert |
 |---|---|
 | VM | 2 vCPU, 4 GB RAM, 10 GB Disk |
-| Betriebssystem | Debian mit `sudo`, `curl` und Internetzugang |
+| Betriebssystem | Debian mit `sudo`, `curl`, `git`, `make` und Internetzugang |
 | Benutzer | Benutzer mit `sudo`-Rechten |
 | Netz | Internetzugang ohne VPN für den Bau der Images (siehe Fehlerquellen) |
 
@@ -82,6 +82,7 @@ make test-basic
 | `make deploy` | Baut die Images, erzeugt bei Bedarf die PKI und startet die Topologie neu |
 | `make destroy` | Stoppt die Topologie und räumt auf |
 | `make test-all` | Führt alle Tests aus und meldet am Ende `ALL TESTS PASSED` oder die fehlgeschlagenen Tests |
+| `make preflight` | Schnelltest vor der Demo in wenigen Sekunden: alle Container laufen, Regelwerke geladen, Portal erreichbar, Angreifer nicht gesperrt, VPN, Loki, Grafana und Kanal K-13 bereit |
 
 Der Webserver läuft standardmäßig verwundbar, damit die Angriffe etwas zum Angreifen haben. Sicherer Modus:
 
@@ -105,13 +106,12 @@ Der Responder im SIEM sperrt Angreifer automatisch an `fw-edge` (Playbooks P-1 b
 
 ## SIEM und Dashboard
 
-Grafana lauscht auf Port 3000 der VM.
+Grafana ist nur auf 127.0.0.1:3000 der VM erreichbar. So läuft das Passwort nie im Klartext durch das Netz (`docs/haertung.md`).
 
 | Zugriff von | Adresse |
 |---|---|
 | Browser in der VM | `http://localhost:3000` |
-| Browser auf dem Host der VM (Bridge- oder Host-only-Netz) | `http://<IP der VM>:3000`, die IP zeigt `ip -4 -br addr` |
-| Host bei NAT-Netz der VM | Portweiterleitung Host 3000 → Gast 3000 oder `ssh -L 3000:localhost:3000 <benutzer>@<VM>` |
+| Browser auf einem anderen Rechner, etwa dem Host der VM | SSH-Tunnel `ssh -L 3000:localhost:3000 <benutzer>@<IP der VM>`, dann `http://localhost:3000`. Die IP zeigt `ip -4 -br addr` in der VM, bei NAT-Netz der VM zuerst eine Portweiterleitung für SSH (Host 2222 → Gast 22) und `ssh -p 2222 -L 3000:localhost:3000 <benutzer>@localhost`. |
 
 Anmeldung mit `admin` und dem Passwort, das `make pki` bzw. `make deploy` zufällig erzeugt. Anzeigen: `make grafana-password`. Ein anderes Passwort: `configs/siem/secrets/grafana.env` ändern und `make deploy`.
 
@@ -139,9 +139,11 @@ docker exec clab-dmz-client1 curl -sk -G --data-urlencode "file=../../etc/passwd
 | `make test-siem` | SIEM-Dienste, Zugang, Latenz bis zum SIEM, Meldungen von WAF, IDS und Firewalls mit Feldern, Dashboard |
 | `make test-web` | Webanwendung in beiden Betriebsarten, eigene Container außerhalb der Topologie |
 | `make test-vpn` | Tunnel und Verfahren nach BSI TR-02102-3, Zugriff über den Tunnel, Sperren, Abweisung unzulässiger Verfahren, PKI |
-| `make test-hardening` | Härtung: Container ohne Privilegien und mit minimalen Rechten, Ausbruchsversuche, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Neustart und Logbegrenzung, Docker-Loglimits, Slowloris, Grafana-Zugang (`docs/haertung.md`) |
-| `make test-response` | Automatische Reaktion: Kanal K-13 nach BSI TR-02102-4, Schutzliste, alle Playbooks, Reaktionszeit unter 1 s, Anti-Spoofing, Beobachtungsmodus, Ablauf, Neustart, Dashboard |
+| `make test-hardening` | Härtung: Container ohne Privilegien und mit minimalen Rechten, Suricata ohne root, Ausbruchsversuche, Kernel-Einstellungen, Output-Ketten der Firewalls, IDS-Neustart und Logbegrenzung, Docker-Loglimits, Slowloris, Grafana-Zugang, sicherer Start der Firewalls, Anti-Spoofing in der DMZ (`docs/haertung.md`) |
+| `make test-response` | Automatische Reaktion: Kanal K-13 nach BSI TR-02102-4, Schutzliste, alle Playbooks, Reaktionszeit unter 1 s, Anti-Spoofing, Sensorbindung, Beobachtungsmodus, Ablauf, Neustart, Dashboard |
 | `make test-attacks` | Die vier Angriffe A-1 bis A-4 mit Selbstprüfung (`attacks/README.md`) |
+
+Ablauf der Live-Demo: [`docs/demo.md`](docs/demo.md).
 
 Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie voraus (`make deploy`). Die Tests der einzelnen Schichten schalten die automatische Reaktion für ihre Dauer in den Beobachtungsmodus und heben vorhandene Sperren auf, damit ihre Angriffe den Angreifer nicht für die folgenden Tests aussperren.
 
@@ -173,7 +175,7 @@ Alle Tests außer `test-images` und `test-web` setzen eine laufende Topologie vo
 | `permission denied` bei `docker` oder `containerlab` | Gruppen nach der Installation noch nicht aktiv | Neu anmelden |
 | `containerlab deploy` meldet eine fehlende Datei unter `configs/vpn/pki` | PKI noch nicht erzeugt | `make pki` oder `make deploy` |
 | `make` meldet `missing separator` | Befehle im Makefile mit Leerzeichen statt Tab eingerückt | Tab verwenden |
-| Grafana im Browser nicht erreichbar | Netz der VM erlaubt keinen Zugriff vom Host | In der VM `curl -s http://localhost:3000/api/health` prüfen, dann Portweiterleitung oder SSH-Tunnel (siehe SIEM und Dashboard) |
+| Grafana im Browser auf einem anderen Rechner nicht erreichbar | Grafana ist absichtlich nur auf 127.0.0.1 der VM veröffentlicht | In der VM `curl -s http://localhost:3000/api/health` prüfen, dann SSH-Tunnel (siehe SIEM und Dashboard) |
 | `test-siem` meldet „Loki ready“ oder „Grafana healthy“ als fehlgeschlagen | Loki braucht nach dem Start 15 s, Grafana beim ersten Start länger | Der Test wartet bis 60 bzw. 120 s. Danach `docker logs clab-dmz-siem-loki` bzw. `clab-dmz-siem-grafana` prüfen |
 | Keine Meldungen im Dashboard | Ein Sensor meldet nicht oder Fluent Bit verwirft die Meldung | `docker logs clab-dmz-siem-collector`, danach in Explore `{job="dmz"}` ohne Filter |
 | `containerlab deploy` meldet eine fehlende Datei unter `configs/response/keys` | SSH-Schlüssel für K-13 noch nicht erzeugt | `make pki` oder `make deploy` |

@@ -101,6 +101,35 @@ fw_report() {
   echo "$ms $since"
 }
 
+poll_grafana() {
+  docker exec -i "${P}-siem" sh -s "$1" "$2" "${PASS}" <<'POLL'
+i=0
+while [ "$i" -lt 150 ]; do
+  if curl -s -u "admin:$3" -H 'Content-Type: application/json' -d "$1" http://127.0.0.1:3000/api/ds/query | grep -qF "latency $2"; then
+    cut -d' ' -f1 /proc/uptime
+    exit 0
+  fi
+  i=$((i + 1))
+  usleep 10000
+done
+echo timeout
+POLL
+}
+
+grafana_query() {
+  printf '{"queries":[{"refId":"A","datasource":{"type":"loki","uid":"loki"},"expr":"{job=\\"dmz\\", host=\\"waf\\", ident=\\"dmztest\\"} |= \\"%s\\"","queryType":"range","maxLines":10}],"from":"now-5m","to":"now"}' "$1"
+}
+
+stats() {
+  local min=$1 max=$1 sum=0 v
+  for v in "$@"; do
+    [ "$v" -lt "$min" ] && min=$v
+    [ "$v" -gt "$max" ] && max=$v
+    sum=$((sum + v))
+  done
+  echo "$min $((sum / $#)) $max"
+}
+
 send() {
   docker run --rm -i --network "container:${P}-waf" client:0.1 sh -s "$1" <<'SEND'
 t=$(cut -d' ' -f1 /proc/uptime)
@@ -128,6 +157,15 @@ if curl -s -m 2 "http://${mgmt}:3100/ready" >/dev/null 2>&1; then r=reachable; e
 result S-01 "Loki not reachable from outside siem (${mgmt:-?}:3100)" blocked "$r"
 r6=$(x siem ip -6 route show default 2>/dev/null)
 result S-01 "siem has no IPv6 default route" "" "$r6"
+result S-01 "Grafana published on 127.0.0.1 of the VM only (SSH tunnel for other hosts)" "127.0.0.1:3000" "$(docker port "${P}-siem" 3000/tcp 2>/dev/null | tr '\n' ' ' | sed 's/ $//')"
+result S-01 "siem does not forward packets" 0 "$(x siem cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)"
+if x siem curl -s -m 2 --interface eth0 http://1.1.1.1/ >/dev/null 2>&1; then r=reachable; else r=blocked; fi
+result S-01 "no connection out of siem over the management network" blocked "$r"
+result S-01 "management network filter counts the attempt" yes "$(has "$(x siem nft list chain inet mgmt output 2>/dev/null)" 'counter packets [1-9]')"
+tok="${RUN}-mgmt"
+printf '<134>%s waf dmztest: %s\n' "$(date '+%b %e %H:%M:%S')" "$tok" > "/dev/udp/${mgmt:-127.0.0.2}/5140" 2>/dev/null
+sleep 2
+result S-01 "syslog over the management network not accepted" no "$(has "$(lines "{job=\"dmz\"} |= \"${tok}\"")" '"result":\[\{')"
 
 echo "== S-02 Latency DMZ -> SIEM (waf -> fw-dmz -> fw-edge -> fw-backend -> Fluent Bit -> Loki)"
 tmp=$(mktemp)
@@ -152,6 +190,28 @@ for v in "${lat[@]}"; do
 done
 echo "   min ${min} ms, avg $((sum / ${#lat[@]})) ms, max ${max} ms (resolution about 20 ms)"
 result S-02 "every message searchable in Loki within ${LIMIT_MS} ms" yes "$([ "$max" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+
+echo "== S-07 Display: event visible through Grafana, the query path of the dashboard"
+tmp=$(mktemp)
+glat=()
+for i in $(seq "$SAMPLES"); do
+  tok="${RUN}-g${i}"
+  poll_grafana "$(grafana_query "$tok")" "$tok" > "$tmp" &
+  pid=$!
+  sleep 0.3
+  sent=$(send "$tok" | tail -1)
+  wait "$pid"
+  ms=$(elapsed "$sent" "$(tr -d '\r\n' < "$tmp")")
+  if [ "$ms" = "99999" ]; then echo "   sample $i: not found"; else echo "   sample $i: ${ms} ms"; fi
+  glat+=("$ms")
+done
+rm -f "$tmp"
+read -r gmin gavg gmax <<< "$(stats "${glat[@]}")"
+echo "   min ${gmin} ms, avg ${gavg} ms, max ${gmax} ms (resolution about 30 ms)"
+echo "   The panels reload every second: on the dashboard an event appears on average 500 ms"
+echo "   later than measured here, at most 1000 ms. Explore Live streams without that delay."
+result S-07 "every event visible through Grafana within ${LIMIT_MS} ms" yes "$([ "$gmax" -lt "$LIMIT_MS" ] && echo yes || echo no)"
+result S-07 "average including the refresh wait (avg + 500 ms) within ${LIMIT_MS} ms" yes "$([ $((gavg + 500)) -lt "$LIMIT_MS" ] && echo yes || echo no)"
 
 echo "== S-03 WAF reports attacks to the SIEM (K-09)"
 tok="${RUN}-waf"

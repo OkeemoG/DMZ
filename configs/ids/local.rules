@@ -1,8 +1,16 @@
-# ids: eigene Regeln fuer Schritt 3.6 (Funktionsnachweis). Die Regeln zu den Angriffen folgen in Phase 6.
-# SID-Bereich des Projekts: 1000001 bis 1000999
+# ids: eigene Regeln des Projekts, SID-Bereich 1000001 bis 1000999 (docs/technologieentscheidungen.md, E-08)
+# P-5 (docs/reaktion.md) reagiert nur auf SID 1000003 und 1000007.
 
 alert http any any -> $HOME_NET any (msg:"DMZ SQL-Injection im URI (UNION SELECT)"; flow:established,to_server; http.uri; content:"union"; nocase; content:"select"; nocase; distance:0; classtype:web-application-attack; sid:1000001; rev:1;)
 
 alert http any any -> $HOME_NET any (msg:"DMZ Pfad-Traversal im URI"; flow:established,to_server; http.uri; content:"../"; classtype:web-application-attack; sid:1000002; rev:1;)
 
-alert tcp 10.10.10.0/24 any -> $EXTERNAL_NET ![80,443] (msg:"DMZ Verbindungsaufbau nach aussen auf nicht freigegebenem Port (V-12)"; flags:S; classtype:policy-violation; sid:1000003; rev:1;)
+alert tcp 10.10.10.0/24 any -> $EXTERNAL_NET ![80,443] (msg:"DMZ Verbindungsaufbau nach aussen auf nicht freigegebenem Port (V-12)"; flags:S,CE; classtype:policy-violation; sid:1000003; rev:2;)
+
+alert http any any -> $HOME_NET any (msg:"DMZ SQL-Injection im Formular (OR-Vergleich)"; flow:established,to_server; http.request_body; content:"or"; nocase; pcre:"/(?:'|%27)(?:\s|\+|%20)*or(?:\s|\+|%20)+(?:'|%27)?\w+(?:'|%27)?(?:\s|\+|%20)*(?:=|%3d)/i"; classtype:web-application-attack; sid:1000004; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"DMZ Cross-Site-Scripting im URI (script-Tag)"; flow:established,to_server; http.uri.raw; content:"script"; nocase; pcre:"/(?:<|%3c)\s*script/i"; classtype:web-application-attack; sid:1000005; rev:1;)
+
+alert http any any -> $HOME_NET any (msg:"DMZ Scanner im User-Agent"; flow:established,to_server; http.user_agent; pcre:"/(?:nikto|sqlmap|nmap|masscan|gobuster|dirbuster|wpscan)/i"; classtype:attempted-recon; sid:1000006; rev:1;)
+
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"DMZ Ausgabe eines Shell-Befehls nach aussen (id)"; flow:established,to_server; content:"uid="; content:"gid="; distance:0; within:64; classtype:trojan-activity; sid:1000007; rev:1;)

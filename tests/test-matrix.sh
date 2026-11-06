@@ -10,7 +10,7 @@
 # Negativtest hat also einen echten Dienst am Ziel. Scheitert die Verbindung,
 # liegt das an Firewall, Routing oder Adressumsetzung, nicht an einem fehlenden Dienst.
 # Nicht enthalten: K-07, K-08, V-10, V-13 (VPN, tests/test-vpn.sh), V-11 (Spiegelport, tests/test-ids.sh),
-# K-10, K-11 (Meldungen der Firewalls selbst, Phase 4).
+# K-10, K-11 (tests/test-siem.sh, S-05), K-12 und V-16 (tests/test-siem.sh, S-01), K-13 (tests/test-response.sh, RE-01).
 set -uo pipefail
 
 P="clab-dmz"
@@ -57,6 +57,8 @@ received() {
     docker exec "${P}-$1" grep -qF "$3" "/tmp/udp-$2.log" 2>/dev/null
   fi
 }
+
+dropped() { x "$1" nft list chain inet filter "$2" 2>/dev/null | sed -n 's/.*counter packets \([0-9]*\) .*verworfen.*/\1/p'; }
 
 node_by_ip() {
   case "$1" in
@@ -119,8 +121,16 @@ probe K-09 waf      udp  10.10.30.10 5140 ok
 probe K-09 ids      udp  10.10.30.10 5140 ok
 
 echo "== Forbidden connections"
+echo "   inet routes 10.0.0.0/8 to fw-edge for V-01 and V-02, so the packets reach the firewall"
+x inet ip route replace 10.0.0.0/8 via 203.0.113.2 dev eth1 >/dev/null 2>&1
+d0=$(dropped fw-edge forward)
 probe V-01 attacker tcp  10.10.20.10 8080 fail
+probe V-01 attacker conn 10.10.30.10 3000 fail
 probe V-02 attacker conn 10.10.10.10 8080 fail
+probe V-02 attacker conn 10.10.10.6  8080 fail
+d1=$(dropped fw-edge forward)
+x inet ip route del 10.0.0.0/8 via 203.0.113.2 dev eth1 >/dev/null 2>&1
+result V-01 "fw-edge itself drops V-01 and V-02 (${d0:-?} -> ${d1:-?} packets)" yes "$([ "${d1:-0}" -gt "${d0:-0}" ] && echo yes || echo no)"
 probe V-03 client1  conn 10.10.10.10 8080 fail
 probe V-03 client1  conn 10.10.10.6  8080 fail
 probe V-03 client1  tcp  10.10.10.14 8080 fail
@@ -133,6 +143,9 @@ probe V-06 web      tcp  10.10.20.10 8080 fail
 probe V-07 web      udp  10.10.30.10 5140 fail
 probe V-08 siem     tcp  192.0.2.10  443  fail
 probe V-12 web      tcp  192.0.2.10  22   fail
+probe V-14 proxy    conn 10.10.10.10 8080 fail
+probe V-15 web      conn 10.10.0.9   22   fail
+probe V-15 client1  conn 10.10.0.9   22   fail
 
 echo "== Stop test services"
 for n in ids siem client1 attacker; do x "$n" pkill socat >/dev/null 2>&1; done

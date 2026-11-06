@@ -6,3 +6,5 @@ configs/vpn/pki/
 configs/response/keys/
 evidence/
 configs/siem/secrets/
+__pycache__/
+repo-review.txt

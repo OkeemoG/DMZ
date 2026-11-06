@@ -69,7 +69,7 @@ def show_status(res):
     if res["offenses"]:
         print("repeat:   " + ", ".join(f"{ip}={n}" for ip, n in sorted(res["offenses"].items())))
     c = res["counters"]
-    print(f"events:   {c.get('events', 0)}  signals: {c.get('signals', 0)}  actions: {c.get('actions', 0)}  errors: {c.get('errors', 0)}")
+    print(f"events:   {c.get('events', 0)}  signals: {c.get('signals', 0)}  actions: {c.get('actions', 0)}  errors: {c.get('errors', 0)}  rejected: {c.get('rejected', 0)}")
     print("playbooks:")
     for p in res["playbooks"]:
         print(f"  {p}")

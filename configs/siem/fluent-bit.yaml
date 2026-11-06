@@ -37,8 +37,13 @@ pipeline:
 
     - name: modify
       match: '*'
-      condition: Key_Value_Equals ident suricata
+      condition: 'Key_Value_Matches src_addr ^udp://10\.10\.10\.14:'
       set: host ids
+
+    - name: modify
+      match: '*'
+      condition: 'Key_Value_Matches src_addr ^udp://10\.10\.10\.6:'
+      set: host waf
 
     - name: modify
       match: '*'

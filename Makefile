@@ -1,4 +1,4 @@
-.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-hardening test-response test-attacks test-all response-status response-mode block quarantine release evidence recover grafana-password host-hardening secrets
+.PHONY: images pki deploy destroy test-basic test-images test-topology test-matrix test-proxy test-web test-waf test-ids test-vpn test-siem test-hardening test-response test-attacks test-all preflight response-status response-mode block quarantine release evidence recover grafana-password host-hardening secrets
 
 TESTS := test-images test-topology test-matrix test-proxy test-waf test-ids test-web test-vpn test-siem test-hardening test-response test-attacks
 
@@ -59,6 +59,9 @@ test-response:
 test-attacks:
 	bash tests/test-attacks.sh
 
+preflight:
+	@bash tests/preflight.sh
+
 RESPOND := docker exec clab-dmz-siem-responder respond
 
 response-status:
@@ -80,7 +83,7 @@ release:
 	@$(RESPOND) release $(IP)
 
 evidence:
-	bash scripts/collect-evidence.sh $(IP) $(or $(MINUTES),30)
+	bash scripts/collect-evidence.sh "$(IP)" $(or $(MINUTES),30)
 
 recover:
 	bash scripts/recover.sh

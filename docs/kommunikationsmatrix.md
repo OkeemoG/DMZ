@@ -1,6 +1,6 @@
 # Kommunikationsmatrix – DMZ-Laborumgebung
 
-Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den Regelwerken in `configs/fw-*`)
+Stand: 2026-11-06, Version 0.5 (passend zu Adressplan 0.4 und den Regelwerken in `configs/fw-*`)
 
 ## Grundsätze
 
@@ -11,6 +11,7 @@ Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 - „Internet“ als Ziel (K-05, K-06) schließt alle privaten Netze nach RFC 1918 aus.
 - Reaktive Sperren und Quarantäne (`docs/reaktion.md`) gehen jeder Zeile vor: `fw-edge` verwirft Verkehr von und zu gesperrten Adressen vor allen anderen Regeln.
 - Anti-Spoofing auf `fw-edge`: Jede Schnittstelle nimmt nur Absender aus ihrem Netz an, das Internet keine internen oder reservierten Adressen außer im VPN-Tunnel.
+- Anti-Spoofing auf `fw-dmz`: Jede DMZ-Adresse ist an ihren Port gebunden. Die IDs dieser Tabelle gelten also für den echten Absender.
 - Die Firewalls selbst senden nur, was die Tabelle verlangt: Meldungen an das SIEM (K-10, K-11), IKE und ESP an die VPN-Gegenstellen (K-07), Antworten und ICMP Echo zur Diagnose. Alles andere verwirft die Kette `output` (`docs/haertung.md`, H-05).
 
 ## Erlaubte Verbindungen
@@ -28,7 +29,7 @@ Stand: 2026-11-05, Version 0.4 (passend zu Netzplan 0.2, Adressplan 0.3 und den 
 | K-09 | `ids` 10.10.10.14, `waf` 10.10.10.6 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-dmz`, `fw-edge`, `fw-backend` | Meldung erkannter Angriffe: WAF über Nginx `error_log`, IDS über `busybox syslogd -R` | MON-02 |
 | K-10 | `fw-dmz` 10.10.0.2 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-edge`, `fw-backend` | Meldung verworfener Pakete (NFLOG, ulogd2, `busybox syslogd -R`) | MON-02 |
 | K-11 | `fw-edge` 10.10.0.9 | `siem` 10.10.30.10 | UDP 5140 (Syslog) | `fw-backend` | Meldung verworfener Pakete (NFLOG, ulogd2, `busybox syslogd -R`) | MON-02 |
-| K-12 | Browser des Operators (VM oder Host der VM) | `siem`, Port 3000 auf der VM freigegeben | TCP 3000 (Grafana) | keines, eigenes Management-Netz nur für `siem` | Anzeige für das SOC über einen Out-of-Band-Zugang. Er führt in keine Zone, weil nur `siem` daran hängt und `siem` nicht weiterleitet. Loki ist nur innerhalb von `siem` erreichbar. | MON-03 |
+| K-12 | Browser des Operators auf der VM, von anderen Rechnern über einen SSH-Tunnel | `siem`, Port 3000 nur auf 127.0.0.1 der VM | TCP 3000 (Grafana) | nftables in `siem` auf `eth0`, eigenes Management-Netz nur für `siem` | Anzeige für das SOC über einen Out-of-Band-Zugang. Er führt in keine Zone: Nur `siem` hängt daran, `siem` leitet nicht weiter und lässt auf `eth0` nur TCP 3000 hinein und nur Antworten hinaus. Loki ist nur innerhalb von `siem` erreichbar. | MON-03 |
 | K-13 | `siem` 10.10.30.10 (`siem-responder`) | `fw-edge` 10.10.0.9 | TCP 22 (SSH, nur Forced Command `fw-response`, BSI TR-02102-4) | `fw-backend`, `fw-edge` (nur `eth4`) | Reaktive Sperren und Quarantäne setzen und aufheben | SEC-04, A-06 |
 
 ## Verbotene Verbindungen
@@ -49,6 +50,10 @@ Die Liste ist eine Auswahl. Jede Zeile ist ein Testfall für Phase 3 und ein mö
 | V-10 | Remote Office im Tunnel | Client-Netz, Backend-Netz | Der Tunnel öffnet vorerst nur die Webanwendung. |
 | V-11 | beliebig | Spiegelport von `ids` | Schnittstelle ohne Adresse. |
 | V-12 | DMZ (alle Systeme) | Internet auf anderen Diensten als K-06, z. B. TCP 22 oder TCP 4444 | Typische Wege für Reverse Shells und Datenabfluss. `fw-dmz` verwirft die Verbindung, das IDS meldet den Versuch trotzdem (SID 1000003). |
+| V-13 | Client-Netz, DMZ | Remote Office im Tunnel (10.99.0.2, 10.99.0.3) | Die VPN-Clients bieten keine Dienste an, der Tunnel ist nur für Verbindungen aus dem Remote Office da. |
+| V-14 | `proxy` | `web` direkt | Umgehung der WAF. `proxy` erreicht nur `waf` (K-02). |
+| V-15 | DMZ, Client-Netz | `fw-edge` 10.10.0.9 TCP 22 | Der Reaktionskanal K-13 ist nur für `siem` offen. |
+| V-16 | `siem` über das Management-Netz (`eth0`) | beliebig | Kein Verbindungsaufbau aus dem SIEM am Firewall-Konzept vorbei, keine Meldungen über `eth0` an das SIEM. |
 
 ## Filterpunkte
 
@@ -69,11 +74,12 @@ Die Liste ist eine Auswahl. Jede Zeile ist ein Testfall für Phase 3 und ein mö
 
 | Test | Geprüfte IDs |
 |---|---|
-| `tests/test-matrix.sh` | K-01 bis K-06, K-09 (bis zur Ablage in Loki), V-01 bis V-08, V-12 |
+| `tests/test-matrix.sh` | K-01 bis K-06, K-09 (bis zur Ablage in Loki), V-01 bis V-08, V-12, V-14, V-15. Für V-01 und V-02 leitet `inet` während des Tests 10.0.0.0/8 an `fw-edge`, damit die Pakete die Firewall tatsächlich erreichen. |
 | `tests/test-ids.sh` | V-11 (I-01), V-12 mit Erkennung (I-05) |
 | `tests/test-proxy.sh` | K-01 bis K-04 Ende zu Ende |
-| `tests/test-siem.sh` | K-09 mit echten Angriffen (S-03 WAF, S-04 IDS), K-10, K-11 (S-05), K-12 (S-01) |
-| `tests/test-vpn.sh` | K-07, K-08, V-10 |
+| `tests/test-siem.sh` | K-09 mit echten Angriffen (S-03 WAF, S-04 IDS), K-10, K-11 (S-05), K-12 und V-16 (S-01) |
+| `tests/test-vpn.sh` | K-07, K-08, V-10, V-13 |
 | `tests/test-response.sh` | K-13 (RE-01), Anti-Spoofing (RE-10), Sperren vor allen Zeilen (RE-03 bis RE-08) |
+| `tests/test-hardening.sh` | Anti-Spoofing auf `fw-dmz` (H-11) |
 
 

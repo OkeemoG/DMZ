@@ -1,13 +1,13 @@
 # Adressplan – DMZ
 
-Stand: 2026-11-05, Version 0.4 (passend zu `DMZ_Netzplan_0.2.drawio` und `topology/dmz.clab.yml`)
+Stand: 2026-11-06, Version 0.5 (passend zu `topology/dmz.clab.yml`)
 
 ## Regeln
 
 - Das Gateway erhält die erste Adresse des Subnetzes. Hosts beginnen bei `.10`.
 - Das dritte Oktett kennzeichnet die Zone: 0 Transit, 10 DMZ, 20 Client, 30 Backend.
 - Die Knoten laufen ohne Management-Netz (`network-mode: none`) und haben kein `eth0`. Eigene Links beginnen bei `eth1`. Jeder Verkehr läuft über den Datenpfad und damit durch die Firewalls (Test T-01, T-03d).
-- Einzige Ausnahme ist `siem`: Es hat ein `eth0` im Management-Netz von Containerlab, damit der Operator Grafana erreicht (K-12). Die vier SIEM-Dienste `siem-collector`, `siem-loki`, `siem-grafana` und `siem-responder` teilen sich das Netz von `siem` und damit die Adresse 10.10.30.10.
+- Einzige Ausnahme ist `siem`: Es hat ein `eth0` im Management-Netz von Containerlab, damit der Operator Grafana erreicht (K-12). `siem` leitet nicht weiter und filtert `eth0`: hinein nur TCP 3000, hinaus nur Antworten (V-16). Die vier SIEM-Dienste `siem-collector`, `siem-loki`, `siem-grafana` und `siem-responder` teilen sich das Netz von `siem` und damit die Adresse 10.10.30.10.
 - Jeder Link verbindet genau zwei Knoten .
 - Die Internet-Adressen stammen aus den Dokumentationsbereichen nach RFC 5737.
 
@@ -29,7 +29,7 @@ Stand: 2026-11-05, Version 0.4 (passend zu `DMZ_Netzplan_0.2.drawio` und `topolo
 | DMZ, Spiegelport | ohne Adresse | `fw-dmz` – `ids` |
 | Client-Netz | 10.10.20.0/24 | `router-int` – `client1` |
 | Backend-Netz | 10.10.30.0/24 | `fw-backend` – `siem` |
-| Management, nur `siem` | 172.20.20.0/24, Adresse von Docker vergeben | `siem` eth0 – VM, Port 3000 freigegeben |
+| Management, nur `siem` | 172.20.20.0/24, Adresse von Docker vergeben | `siem` eth0 – VM, Port 3000 nur auf 127.0.0.1 der VM |
 | VPN, virtuelle Adressen | 10.99.0.2, 10.99.0.3 (Pools je Client) | `fw-edge` – `ro-client1`, `ro-client2`, richtlinienbasiertes IPsec ohne Tunnel-Schnittstelle |
 
 Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz ist als 10.10.0.0/16 zusammenfassbar.
@@ -97,7 +97,7 @@ Die gesamte DMZ ist als 10.10.10.0/24 zusammenfassbar. Das gesamte Firmennetz is
 | Knoten | Ziel | Nächster Hop |
 |---|---|---|
 | `attacker` | Standard | 192.0.2.1 |
-| `inet` | keine Routen in 10.0.0.0/8 | – |
+| `inet` | keine Routen in 10.0.0.0/8 (nur `tests/test-matrix.sh` setzt für V-01 und V-02 vorübergehend eine Route zu `fw-edge`) | – |
 | `ro-client1` | Standard | 198.51.100.1 |
 | `ro-client2` | Standard | 198.51.100.5 |
 | `ro-client1`, `ro-client2` | 10.10.0.0/16 | IPsec-Richtlinie zu `fw-edge`, Route in Tabelle 220 von strongSwan |

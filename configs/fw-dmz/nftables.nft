@@ -4,6 +4,21 @@
 flush ruleset
 
 table inet filter {
+    chain prerouting {
+        type filter hook prerouting priority raw; policy accept;
+        iifname "eth1" ip saddr { 10.10.10.0/24, 10.10.0.2 } jump spoofed comment "Transit: DMZ-Absender kommen nie von aussen"
+        iifname "eth2" ip saddr != 10.10.10.2 jump spoofed comment "proxy"
+        iifname "eth3" ip saddr != 10.10.10.6 jump spoofed comment "waf"
+        iifname "eth4" ip saddr != 10.10.10.10 jump spoofed comment "web"
+        iifname "eth5" ip saddr != 10.10.10.14 jump spoofed comment "ids"
+        iifname "eth6" jump spoofed comment "Spiegelport: ids sendet hier nichts"
+    }
+
+    chain spoofed {
+        limit rate 20/second burst 40 packets log prefix "fw-dmz spoof drop: " group 1 queue-threshold 1
+        counter drop comment "gefaelschter Absender"
+    }
+
     chain input {
         type filter hook input priority filter; policy drop;
         iif "lo" accept

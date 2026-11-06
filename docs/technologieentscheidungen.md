@@ -1,8 +1,8 @@
 # Technologieentscheidungen – DMZ-Laborumgebung
 
-Stand: 2026-11-05, Version 0.4.
+Stand: 2026-11-06, Version 0.5.
 
-Alle Speicherwerte sind Schätzungen ohne Messung. Die Messung folgt mit dem Ressourcenbudget. Versionen werden in Phase 2 festgelegt.
+Die Spalte „RAM geschätzt“ stammt aus der Planung. Gemessene Werte stehen bei den Entscheidungen (z. B. R-04, R-07) und am Ende jeder Testausgabe (Abschnitt „Resources“).
 
 ## Übersicht
 
@@ -75,7 +75,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Begründung:** BSI TR-02102-3 beschreibt IKEv2 und IPsec mit konkreten Verfahren und Mindestanforderungen. Damit lässt sich die Konfiguration nach dem Stand der Technik belegen und testen (N-00 bis N-10).
 - **Ursprünglicher Plan:** WireGuard (UDP 51820). Verworfen, weil WireGuard fest Curve25519 und ChaCha20-Poly1305 nutzt. Beide stehen nicht in TR-02102-3, und die Verfahren lassen sich nicht anpassen. Test N-09 belegt, dass `fw-edge` genau diese Verfahren abweist.
 - **Alternativen:** WireGuard (siehe oben). OpenVPN (eigenes Protokoll auf TLS-Basis, nicht in TR-02102-3).
-- **Geprüft:** `test-vpn` (N-00 bis N-10), XFRM im Container (R-03), ohne Privilegien (H-05).
+- **Geprüft:** `test-vpn` (N-00 bis N-10), XFRM im Container (R-03), ohne Privilegien (H-01).
 - **Anforderung:** NET-05.
 
 ### E-05 Reverse-Proxy mit Nginx
@@ -90,7 +90,8 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 - **Entscheidung:** Image `owasp/modsecurity-crs` in der Variante `nginx-alpine`. Das Image enthält ModSecurity v3 und CRS 4 und lauscht auf Port 8080.
 - **Konfiguration:** Paranoia-Stufe 1, Anomalie-Schwelle 5. Die echte Client-Adresse kommt aus `X-Real-IP`, aber nur vom `proxy` (`configs/waf/realip.conf`). Regel 920350 ist nur für die eigenen Adressen abgeschaltet (`configs/waf/REQUEST-900-EXCLUSION-RULES-BEFORE-CRS.conf`, siehe E-12).
-- **Abweichung:** Das eigene Image setzt `USER root`. Containerlab führt die `exec`-Befehle für Adressen und Routen mit dem Standardbenutzer des Images aus, und dafür braucht es Root. Die Nginx-Worker, die die Anfragen bearbeiten, laufen ohne Root (Test WA-00).
+- **Image:** Das eigene Image wechselt nur für `apk` auf root und danach mit `USER nginx` zurück wie das Upstream-Image. Containerlab führt die `exec`-Befehle für Adressen und Routen trotzdem als root aus. Nginx-Master und Worker laufen ohne root (H-02, WA-00). Bis Phase 4 blieb das Image auf `USER root`, das hat Phase 5 behoben.
+- **Doppelte Angabe:** Die Real-IP-Einstellung steht zusätzlich als Umgebungsvariablen in der Topologie (`SET_REAL_IP_FROM`, `REAL_IP_HEADER`), die die Vorlage des Images auswertet. Die Werte sind gleich wie in `realip.conf`.
 - **Begründung:** Fertiges, gepflegtes Image des CRS-Projekts. Der Regelsatz ist der verbreitete offene Standard. Die Empfindlichkeit ist über eine Stufe einstellbar.
 - **Alternative:** Coraza. Jüngeres Projekt, kein vergleichbares fertiges Image mit Nginx.
 - **Anforderungen:** SYS-04, SEC-02, SEC-03.
@@ -106,18 +107,19 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 ### E-08 IDS mit Suricata und eigenen Regeln
 
 - **Entscheidung:** Suricata am Spiegelport. Eigene Regeln, passend zu den Angriffen. Kein vollständiger fremder Regelsatz.
+- **Regeln** (`configs/ids/local.rules`): 1000001 UNION SELECT im URI, 1000002 Pfad-Traversal, 1000003 Verbindungsaufbau aus der DMZ auf nicht freigegebenen Ports (V-12, auch mit ECN-Bits), 1000004 SQL-Injection mit OR-Vergleich im Formular, 1000005 `script`-Tag im URI, 1000006 bekannte Scanner im User-Agent, 1000007 Ausgabe von `id` aus der DMZ nach außen. 1000004 bis 1000007 kamen mit dem Review vom 2026-11-06 hinzu. P-5 reagiert nur auf 1000003 und 1000007 (`docs/reaktion.md`), neue Regeln ändern die Reaktion also nicht unbemerkt.
 - **Begründung:** Verbreitetes offenes IDS mit Ausgabe als JSON. Eigene Regeln halten den Speicherbedarf klein und belegen das Verständnis.
 - **Alternativen:** Snort 3 (kein gepflegtes kleines Image). Zeek (Protokollanalyse, keine Signaturen).
 - **Geprüft:** Alpine 3.24 enthält Suricata 8.0.8 (Test I-00). Alpine 3.20 enthielt nur 7.0.7.
 - **Spiegelung:** `tc` kopiert alle eingehenden Pakete von `fw-dmz` eth1 bis eth4 vor der Filterung nach eth6. Das IDS sieht damit auch Pakete, die `fw-dmz` verwirft (Test I-05).
 - **Folge:** Anfragen, die die WAF durchlässt, sieht das IDS zweimal: auf dem Weg `proxy` → `waf` und auf dem Weg `waf` → `web`. Ein Alarm auf dem zweiten Weg (Quelle 10.10.10.6) zeigt, dass ein Angriff die WAF passiert hat. Das SIEM muss die Dopplung beim Zählen berücksichtigen.
 - **Netze:** `HOME_NET` ist die DMZ 10.10.10.0/24 (`configs/ids/lab.yaml`, Abschnitt `vars`). Damit gilt für SID 1000003 auch ein Verbindungsaufbau aus der DMZ ins Client- oder Backend-Netz als Verbindung nach außen. Vorher galt der Standard von Suricata (alle privaten Netze). Weil `--include` gleichnamige Abschnitte vollständig ersetzt, enthält `lab.yaml` den ganzen Abschnitt `vars` aus Suricata 8.0.8.
-- **Betrieb:** Seit Phase 5 überwacht ein Watchdog Suricata, die Logdateien sind auf 50 MB begrenzt (H-06).
+- **Betrieb:** Seit Phase 5 überwacht ein Watchdog Suricata, die Logdateien sind auf 50 MB begrenzt (H-06). Seit dem Review läuft Suricata als Benutzer `suricata` nur mit `NET_ADMIN` und `NET_RAW` (H-02).
 - **Anforderungen:** SYS-03, SEC-03, MON-01.
 
 ### E-09 SIEM mit Grafana und Loki
 
-- **Entscheidung:** Fluent Bit nimmt die Meldungen an, Loki speichert und durchsucht sie, Grafana zeigt das Dashboard. Jeder Dienst läuft in einem eigenen Container mit unverändertem offiziellem Image. Alle drei teilen sich das Netz des Knotens `siem` (`network-mode: container:siem`), wie die Container eines Pods in Kubernetes. `siem` selbst hält nur Adressen und Routen.
+- **Entscheidung:** Fluent Bit nimmt die Meldungen an, Loki speichert und durchsucht sie, Grafana zeigt das Dashboard. Jeder Dienst läuft in einem eigenen Container mit unverändertem offiziellem Image. Alle SIEM-Container (Fluent Bit, Loki, Grafana, Responder) teilen sich das Netz des Knotens `siem` (`network-mode: container:siem`), wie die Container eines Pods in Kubernetes. `siem` selbst hält nur Adressen und Routen.
 - **Begründung:** Passt in das Speicherbudget. Der Wazuh-Indexer verlangt mindestens 4 GB RAM und scheidet damit aus. Elasticsearch und Graylog liegen in derselben Größenordnung. Getrennte Container erlauben eine Speichergrenze je Dienst und brauchen keine Prozessverwaltung. Adressplan und Firewall-Regeln bleiben unverändert, weil alle Dienste unter 10.10.30.10 erreichbar sind und sich über `localhost` ansprechen.
 - **Abweichung vom Entwurf:** Das gemeinsame Image `lab-siem` entfällt, damit auch Risiko R-02.
 - **Härtung:** Loki lauscht nur auf `127.0.0.1` und ist von außerhalb von `siem` nicht erreichbar (Test S-01). Aufbewahrung 24 h (R-05). Grafana ohne Registrierung, ohne Verbindungen ins Internet. Seit Phase 5 mit erzeugtem Admin-Passwort und weiteren Maßnahmen (E-21, `docs/haertung.md`).
@@ -135,7 +137,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 | `fw-edge`, `fw-dmz` | NFLOG und ulogd2 (E-11), ebenfalls über `busybox syslogd -R` |
 
 - **Begründung:** Kein eigener Agent auf den meldenden Systemen. UDP puffert nicht, Fluent Bit gibt alle 0,2 s an Loki weiter. Gemessen vom Ereignis bis zur Auffindbarkeit in Loki: im Mittel 167 bis 314 ms, höchstens 650 ms (Tests S-02 bis S-05).
-- **Grenze:** BusyBox verarbeitet höchstens 2048 Zeichen pro Meldung. Deshalb gehen Suricata-Alarme ohne Paketinhalt und Metadaten hinaus. BusyBox schickt keinen Hostnamen mit. Fluent Bit setzt `host` beim IDS über die Programmkennung, bei den Firewalls über die Absenderadresse.
+- **Grenze:** BusyBox verarbeitet höchstens 2048 Zeichen pro Meldung. Deshalb gehen Suricata-Alarme ohne Paketinhalt und Metadaten hinaus. Fluent Bit setzt `host` bei IDS, WAF und Firewalls über die Absenderadresse (`src_addr`), nicht über den Hostnamen in der Meldung. Ein Sensor kann sich so nicht als anderer ausgeben (E-22).
 - **Grenze:** Syslog über UDP ist unverschlüsselt und nicht authentifiziert. `fw-backend` lässt nur die vier Absenderadressen zu (K-09 bis K-11).
 - **Alternativen:** Fluent Bit auf jedem meldenden System (strukturierte Daten, vier zusätzliche Dienste). Promtail (seit dem 2. März 2026 abgekündigt). Grafana Alloy (Nachfolger, deutlich größer).
 - **Anforderungen:** MON-02, MON-04.
@@ -168,7 +170,8 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 ### E-15 Zugang des Operators über ein Out-of-Band-Netz
 
-- **Entscheidung:** Nur `siem` erhält ein Management-Netz (`network-mode: bridge`). Docker gibt Port 3000 auf der VM frei. `configs/siem/mgmt-routing.sh` leitet eigenen Verkehr von `siem` über `fw-backend` und schickt nur Antworten an den Browser über `eth0` zurück. IPv6 ist auf `eth0` abgeschaltet.
+- **Entscheidung:** Nur `siem` erhält ein Management-Netz (`network-mode: bridge`). Docker gibt Port 3000 nur auf 127.0.0.1 der VM frei, von anderen Rechnern führt ein SSH-Tunnel dorthin. `configs/siem/mgmt-routing.sh` leitet eigenen Verkehr von `siem` über `fw-backend` und schickt Antworten an den Browser über `eth0` zurück. Ein nftables-Filter auf `eth0` lässt nur TCP 3000 hinein und nur Antworten hinaus, `siem` leitet nicht weiter (`ip_forward` 0). IPv6 ist auf `eth0` abgeschaltet.
+- **Seit dem Review vom 2026-11-06:** Vorher war Grafana auf allen Schnittstellen der VM erreichbar, und jeder Verkehr mit der Adresse von `eth0` ging dort hinaus, nicht nur Antworten (Test S-01).
 - **Begründung:** Ein eigenes Netz für den Operator entspricht dem Out-of-Band-Management echter SOCs. Es führt in keine Zone. Das SIEM erhält darüber keinen Internetzugang am Firewall-Konzept vorbei (V-08).
 - **Alternative:** Leitung von `siem` in die VM über einen `host:`-Endpunkt von Containerlab. Die Adresse auf der VM-Seite müsste bei jedem Start mit `sudo` gesetzt werden, ohne Vorteil.
 - **Anforderung:** MON-03 (K-12).
@@ -176,8 +179,8 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 ### E-16 Dashboard und Anzeige innerhalb von 1 s
 
 - **Entscheidung:** Das Dashboard „SOC – DMZ“ (`configs/siem/dashboards/soc.json`) wird beim Start geladen, ist die Startseite von Grafana und aktualisiert sich jede Sekunde. Inhalt: Zähler je Sensor, Alarm-Stream mit einer lesbaren Zeile je Ereignis, Top-Quellen über alle Sensoren, Verlauf je Sensor, Angriffsarten der WAF, Signaturen des IDS, Zielports und Regelketten der Firewalls, angegriffene Pfade.
-- **Begründung:** Bei 1 s Aktualisierung liegt die Anzeige im Mittel unter 1 s, im ungünstigsten Fall bei etwa 1,2 s. Für die garantierte Vorgabe verlinkt das Dashboard dieselbe Alarm-Abfrage in Explore. Dort schiebt Grafana neue Meldungen im Modus „Live“ ohne Abfrage-Intervall nach.
-- **Geprüft:** Alle zwölf Abfragen wurden gegen Loki 3.7.9 ausgeführt. Test S-06 prüft Dashboard, Startseite und Alarm-Stream.
+- **Begründung:** Die Anzeige setzt sich zusammen aus Transport bis Grafana (S-07, gemessen über dieselbe Abfrage-Schnittstelle, die die Panels nutzen) und der Wartezeit bis zur nächsten Aktualisierung (im Mittel 0,5 s, höchstens 1 s). Im Mittel liegt sie damit unter 1 s, im ungünstigsten Fall darüber. Für die garantierte Vorgabe verlinkt das Dashboard dieselbe Alarm-Abfrage in Explore. Dort schiebt Grafana neue Meldungen im Modus „Live“ ohne Abfrage-Intervall nach.
+- **Geprüft:** Alle Abfragen des Dashboards wurden gegen Loki 3.7.9 ausgeführt. Test S-06 prüft Dashboard, Startseite und Alarm-Stream, S-07 die Zeit bis zur Sichtbarkeit in Grafana.
 - **Anforderungen:** MON-03, MON-05.
 
 ### E-17 Reaktive Maßnahmen über einen Responder im SIEM
@@ -199,6 +202,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 - **Entscheidung:** Kette `prerouting` mit Priorität `raw` in `table inet filter`. Jede Schnittstelle nimmt nur Absender aus ihrem Netz an. Aus dem Internet kommen keine internen, privaten oder reservierten Absender und nicht die eigene öffentliche Adresse, außer entschlüsselt aus dem VPN-Tunnel (`meta ipsec`). Verworfene Pakete meldet `fw-edge` gedrosselt als `spoof drop`.
 - **Begründung:** Automatische Sperren dürfen nur auf echten Absendern beruhen. Sonst sperrt ein Angreifer mit gefälschten Paketen einen internen Client oder die VPN-Gegenstellen. Explizite Regeln je Schnittstelle statt `fib`, damit das Regelwerk ohne weiteres Kernelmodul lädt und im Bericht lesbar bleibt.
 - **Geprüft:** RE-10.
+- **Seit dem Review vom 2026-11-06 auch auf `fw-dmz`:** Jede DMZ-Adresse ist an ihren Port gebunden, am Transit-Port kommen keine DMZ-Absender an, am Spiegelport nichts (H-11).
 
 ### E-20 Beweissicherung und Wiederherstellung als Skripte
 
@@ -207,17 +211,25 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 
 ### E-21 Härtung nach dem Prinzip der minimalen Rechte
 
-- **Entscheidung:** Firewalls, Router, DMZ-Server und SIEM-Dienste laufen nicht mehr privilegiert, sondern mit genau den nötigen Zusatzrechten (`NET_ADMIN`, beim IDS `NET_RAW`) und `no-new-privileges`, gebündelt über die Gruppen `router`, `dmz` und `siem` in der Topologie. Dazu Kernel-Einstellungen gegen Redirects und Source-Routing, Spiegelports ohne IPv6-Adresse, Output-Ketten mit `policy drop` auf den Firewalls, Watchdog und Logbegrenzung für Suricata, Zeitlimits im Proxy, erzeugtes Grafana-Passwort, Docker-Loglimits auf dem Host. Einzelheiten und Tests: `docs/haertung.md`.
+- **Entscheidung:** Firewalls, Router, DMZ-Server und SIEM-Dienste laufen nicht mehr privilegiert, sondern mit genau den nötigen Zusatzrechten (`NET_ADMIN`, `NET_RAW` ist ohnehin Docker-Standard) und `no-new-privileges`, gebündelt über die Gruppen `router`, `dmz` und `siem` in der Topologie. Dazu Kernel-Einstellungen gegen Redirects und Source-Routing, Spiegelports ohne IPv6-Adresse, Output-Ketten mit `policy drop` auf den Firewalls, Watchdog und Logbegrenzung für Suricata, Zeitlimits im Proxy, erzeugtes Grafana-Passwort, Docker-Loglimits auf dem Host. Einzelheiten und Tests: `docs/haertung.md`.
 - **Begründung:** Containerlab startet Knoten standardmäßig privilegiert. Damit wäre jede Codeausführung in einem DMZ-Server ein Zugriff auf den Host. Minimale Rechte begrenzen den Schaden eines erfolgreichen Angriffs (Defense in Depth hinter WAF und Firewall).
 - **Alternativen:** Schreibgeschütztes Dateisystem und `cap-drop` (von Containerlab nicht angeboten). Adressen von außen über einen Hilfscontainer setzen, damit die DMZ-Server ohne `NET_ADMIN` auskommen (Containerlab sieht das nicht vor, Ablauf würde unübersichtlich). User-Namespace-Remapping für Docker (Umstellung des Hosts).
-- **Geprüft:** `make test-hardening`, H-01 bis H-09. Vorab: Regelwerke mit nftables, Proxy-Konfiguration und Slowloris mit Nginx 1.28.
+- **Geprüft:** `make test-hardening`, H-01 bis H-11. Vorab: Regelwerke mit nftables, Proxy-Konfiguration und Slowloris mit Nginx 1.28.
+- **Nachtrag aus dem Review vom 2026-11-06:** Suricata ohne root, Firewalls laden das Regelwerk vor den Adressen und schließen bei einem Fehler (H-10), Anti-Spoofing auf `fw-dmz` (H-11), Management-Zugang des SIEM gefiltert (E-15).
 - **Anforderungen:** Aufgabenstellung „gehärtet … Wirksamkeit überprüft“, Phase 5. Eine ID in der Anforderungsliste nachtragen.
+
+### E-22 Bindung der Sensoren an ihre Absenderadresse
+
+- **Entscheidung:** Der Responder nimmt Meldungen eines Sensortyps nur von dessen Adresse an: `ulogd` von `fw-edge` und `fw-dmz`, `suricata` von `ids`, `modsecurity` von `waf` (`sensors` in `configs/response/playbook.json`). Die Adresse liefert Fluent Bit im Feld `src_addr`. Fremde Meldungen zählt der Responder als `rejected` und meldet sie gedrosselt.
+- **Begründung:** Alle Sensoren senden an denselben UDP-Eingang. Ohne Bindung könnte ein kompromittierter Sensor, etwa die WAF, Firewall-Meldungen über Seitwärtsbewegungen von `client1` schicken und damit eine unbefristete Quarantäne auslösen. Die Absenderadresse ist belastbar, weil `fw-dmz` und `fw-edge` gefälschte Absender verwerfen (E-19).
+- **Alternativen:** Ein eigener Eingang je Sensor (vier Ports, mehr Regeln auf drei Firewalls). Signierte Meldungen (eigener Agent auf jedem Sensor).
+- **Geprüft:** RE-15, H-11.
 
 ## Risiken und Prüfungen
 
 | Nr. | Risiko | Prüfung |
 |---|---|---|
-| R-01 | Die Anzeige im Dashboard dauert länger als 1 s. | Erledigt: Transport bis Loki gemessen 50 bis 650 ms (S-02 bis S-05), `min_refresh_interval` auf 1 s, Live-Ansicht für die garantierte Vorgabe (E-16). |
+| R-01 | Die Anzeige im Dashboard dauert länger als 1 s. | Transport bis Loki gemessen 50 bis 650 ms (S-02 bis S-05), bis Grafana S-07. Mit 1 s Aktualisierung im Mittel unter 1 s, im ungünstigsten Fall darüber. Live-Ansicht für die garantierte Vorgabe (E-16). |
 | R-02 | Das gemeinsame Image `lab-siem` mit drei Diensten lässt sich nicht sauber bauen. | Entfällt: drei Container mit offiziellen Images (E-09). |
 | R-03 | nftables, tc und XFRM (IPsec) brauchen erweiterte Rechte im Container. | Erledigt: Test R-03 in `test-topology` bestanden, seit Phase 5 mit `NET_ADMIN` statt Privilegien (H-01). |
 | R-04 | Suricata belegt mehr RAM als geschätzt. | Erledigt: gemessen 37 MB, Grenze auf 256 MB gesenkt. |
@@ -225,7 +237,7 @@ Größen gemessen am 2026-11-02 mit `make images`, `fw`, `router` und `client` d
 | R-06 | Der Bau der Images bricht über ein VPN ab (`I/O error` bei `apk`), weil das VPN die MTU verkleinert. | Images ohne VPN bauen oder die MTU von Docker anpassen. Vor dem Labortermin alle Images bauen. Hinweis im README. |
 | R-07 | Grafana erreicht seine Speichergrenze und wird vom Kernel beendet. | Gemessen bis 349 MB, Grenze von 384 auf 512 MB erhöht. Test S-00 prüft auf Abbruch wegen Speichermangel. |
 | R-08 | Die Disk der VM wird knapp: 1,9 GB frei (2026-11-04). | Nicht benötigte Images löschen, Build-Cache leeren, vor dem Labortermin messen. Das Image `responder` teilt die Basis mit `web`. |
-| R-09 | Die automatische Sperre trifft Unbeteiligte (gefälschte Absender, gefälschter `X-Forwarded-For`, Fehlalarme). | Anti-Spoofing (E-19), `xff` nur hinter dem Proxy (E-14), Schutzliste dreifach, Schwellen, Ablaufzeiten, Beobachtungsmodus. Tests RE-02, RE-09, RE-10, RE-11. |
+| R-09 | Die automatische Sperre trifft Unbeteiligte (gefälschte Absender, gefälschter `X-Forwarded-For`, Fehlalarme, gefälschte Sensoren). | Anti-Spoofing (E-19), `xff` nur hinter dem Proxy (E-14), Sensorbindung (E-22), Schutzliste dreifach, Schwellen, Ablaufzeiten, Beobachtungsmodus. Tests RE-02, RE-09, RE-10, RE-11, RE-15. Restrisiko: P-3 lässt sich mit gefälschten öffentlichen Absendern auslösen (`docs/reaktion.md`, Grenzen). |
 | R-10 | Ein kompromittiertes SIEM missbraucht K-13. | Forced Command, Prüfung auf der Firewall, Schutzliste im Regelwerk (E-18). Restrisiko: Sperre nicht geschützter Adressen. |
 | R-11 | Der Responder fällt aus. | Sperren bleiben auf `fw-edge` und laufen dort ab. Herzschlag im Dashboard. Test RE-13. |
 | R-12 | Die Angriffe der Schicht-Tests sperren den Angreifer für die folgenden Tests aus. | `tests/lib-response.sh` schaltet für diese Tests in den Beobachtungsmodus und hebt Sperren vorher und nachher auf. |

