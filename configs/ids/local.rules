@@ -13,4 +13,4 @@ alert http any any -> $HOME_NET any (msg:"DMZ Cross-Site-Scripting im URI (scrip
 
 alert http any any -> $HOME_NET any (msg:"DMZ Scanner im User-Agent"; flow:established,to_server; http.user_agent; pcre:"/(?:nikto|sqlmap|nmap|masscan|gobuster|dirbuster|wpscan)/i"; classtype:attempted-recon; sid:1000006; rev:1;)
 
-alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"DMZ Ausgabe eines Shell-Befehls nach aussen (id)"; flow:established,to_server; content:"uid="; content:"gid="; distance:0; within:64; classtype:trojan-activity; sid:1000007; rev:1;)
+alert tcp $HOME_NET any -> $EXTERNAL_NET any (msg:"DMZ Ausgabe eines Shell-Befehls nach aussen (id)"; flow:established,to_server,no_stream; content:"uid="; content:"gid="; distance:0; within:64; classtype:trojan-activity; sid:1000007; rev:2;)

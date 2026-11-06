@@ -79,7 +79,13 @@ for n in waf siem-collector siem-loki siem-grafana siem-responder; do
   result H-02 "$n main process not root (uid ${uid:-?})" yes "$([ -n "$uid" ] && [ "$uid" != 0 ] && echo yes || echo no)"
 done
 sp=$(suricata_pid)
-result H-02 "ids: suricata runs as user suricata" suricata "$(x ids ps -o pid,user 2>/dev/null | awk -v p="${sp:-x}" '$1 == p { print $2 }')"
+su=$(x ids ps -o pid,user 2>/dev/null | awk -v p="${sp:-x}" '$1 == p { print $2 }')
+result H-02 "ids: suricata runs as user suricata" suricata "$su"
+if [ "$su" != suricata ]; then
+  echo "   last start errors (watchdog):"
+  x siem curl -s -G http://127.0.0.1:3100/loki/api/v1/query_range --data-urlencode 'query={job="dmz", ident="ids-watchdog"}' --data-urlencode limit=5 2>/dev/null \
+    | grep -oE 'suricata exited[^"]*' | head -5 | sed 's/^/     /'
+fi
 result H-02 "ids: suricata holds only NET_ADMIN and NET_RAW" 0000000000003000 "$(x ids sh -c "awk '/^CapEff:/ { print \$2 }' /proc/${sp:-0}/status" 2>/dev/null)"
 w=$(x web ps -o user,args 2>/dev/null | grep -c '^app .*gunicorn')
 result H-02 "web: gunicorn workers as app" yes "$([ "${w:-0}" -ge 1 ] && echo yes || echo no)"
