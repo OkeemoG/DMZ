@@ -7,12 +7,12 @@ while true; do
   chown -R suricata:suricata /var/log/suricata 2>/dev/null
   t0=$(cut -d. -f1 /proc/uptime)
   case "$mode" in
-    0) how="user suricata via --user"
-       suricata --user suricata --group suricata $args >"$err" 2>&1 ;;
-    1) how="user suricata via setpriv"
+    0) how="user suricata via setpriv"
        setpriv --reuid=suricata --regid=suricata --init-groups \
          --inh-caps=-all,+net_admin,+net_raw --ambient-caps=-all,+net_admin,+net_raw \
          suricata $args >"$err" 2>&1 ;;
+    1) how="user suricata via --user"
+       suricata --user suricata --group suricata $args >"$err" 2>&1 ;;
     *) how="root"
        suricata $args >"$err" 2>&1 ;;
   esac
