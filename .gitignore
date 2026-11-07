@@ -8,3 +8,4 @@ evidence/
 configs/siem/secrets/
 __pycache__/
 repo-review.txt
+docs/formelle_Dokumentation/Latex/config/metadaten.tex

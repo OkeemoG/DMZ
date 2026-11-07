@@ -1,0 +1,62 @@
+\begin{titlepage}
+	\begin{minipage}{6in}
+		\vspace*{-4cm}
+		\centering
+		\hspace{-1cm}
+		\ifx\vFirmenlogoPfad\empty\else
+			\raisebox{-0.5\height}{\includegraphics[height=3.5cm]{\vFirmenlogoPfad}}
+		\fi
+		\hfill
+		\ifx\vDHBWLogoPfad\empty\else
+			\raisebox{-0.5\height}{\includegraphics[height=2cm]{\vDHBWLogoPfad}}
+		\fi
+	\end{minipage}
+
+	\vspace*{1cm}
+
+	\begin{center}
+		\vspace*{0.5cm}
+		\Large\textbf{\vTitel}\\
+		\ifx\vUntertitel\empty\else
+			\Large\rm\vUntertitel\\
+		\fi
+
+		\vspace{1\baselineskip}
+
+		\fontsize{14pt}{16.8pt}\selectfont\textbf{\vArbeitstyp}
+		\ifx\vArbeitsbezeichnung\empty\else
+			\textbf{\vArbeitsbezeichnung}
+		\fi
+		\\
+		\normalsize
+
+		\vspace*{5\baselineskip}
+
+		des Studienganges \vStudiengang\\
+
+		\vspace*{0.5\baselineskip}
+
+		an der Dualen Hochschule Baden-Württemberg \vDHBWStandort\\
+
+		\vspace*{1\baselineskip}
+
+		von\\
+
+		\vspace*{0.5\baselineskip}
+
+		\vAutor\\
+
+		\vspace*{2\baselineskip}
+
+		\vAbgabedatum
+		\vfill
+	\end{center}
+
+	\begin{tabular}{l@{\hspace{1.5cm}}l}
+		Bearbeitungszeitraum: & \vBearbeitungszeitraum\\
+		Matrikelnummer, Kurs: & \vMatrikelnummer, \vKursKuerzel\\
+		Betreuer:             & \vBetreuer\\
+	\end{tabular}
+\end{titlepage}
+
+\setcounter{page}{2}
