@@ -1,11 +1,13 @@
 \chapter{Einleitung}\label{chap:einleitung}
 
-\platzhalter{Text}
-
 \section{Motivation und Ausgangslage}\label{sec:motivation-und-ausgangslage}
 
-\platzhalter{Text}
+Aus dem Internet erreichbare Webanwendungen bilden einen wesentlichen Teil der Angriffsfläche eines Unternehmens. Das \ac{bsi} bewertet die Lage der IT-Sicherheit in Deutschland weiterhin als angespannt und sieht im Schutz der Angriffsflächen die entscheidende Aufgabe \autocite{bsi_lagebericht_2025}. Zu den kritischsten Risiken von Webanwendungen zählen Injection-Angriffe einschließlich \ac{xss} sowie fehlerhafte Sicherheitskonfigurationen \autocite{owasp_top10_2025}.
+
+Wird ein öffentlich erreichbarer Webserver kompromittiert, kann er zum Einfallstor in das interne Netz werden. Eine demilitarisierte Zone (\acs{dmz}) wirkt dem als Pufferzone zwischen Internet und internem Netz entgegen: Öffentliche Dienste liegen in einem eigenen Netzsegment, die Übergänge sind streng kontrolliert, und ein erfolgreicher Angriff bleibt auf die \ac{dmz} begrenzt. Da kein Schutz lückenlos ist, müssen Angriffe zusätzlich erkannt, zentral gemeldet und beantwortet werden. Erst das Zusammenspiel aus Prävention, Detektion und Reaktion ermöglicht einen sicheren Betrieb.
+
+Der vorliegende Programmentwurf im Modul \gqq{Sichere Unternehmensnetzwerke} geht von einem fiktiven Unternehmen aus, das eine unternehmenskritische Webanwendung bereitstellt und daneben interne Arbeitsplätze, ein Backend-Netz sowie einen Außenstandort betreibt, dessen Mitarbeitende auf das Firmennetz zugreifen müssen. Diese Umgebung wird als virtualisierte Laborumgebung nachgebildet, abgesichert und durch selbst erstellte Angriffe überprüft.
 
 \section{Aufbau der Dokumentation}\label{sec:aufbau-der-dokumentation}
 
-\platzhalter{Text}
+\autoref{chap:zielsetzung} leitet die Anforderungen und Erfolgskriterien ab, \autoref{chap:theoretische-grundlagen} fasst die wesentlichen Grundlagen zusammen. \autoref{chap:design} beschreibt Architektur, Netzsegmentierung und Komponenten und begründet die Designentscheidungen. \autoref{chap:eingesetzte-methoden-und-umsetzung} erläutert Vorgehen und technische Umsetzung einschließlich Härtung, Reaktion und Monitoring, \autoref{chap:installation} die Installation. \autoref{chap:test-und-evaluation} weist Funktionsfähigkeit und Wirksamkeit durch Tests und Angriffsszenarien nach, \autoref{chap:fazit-und-ausblick} fasst die Ergebnisse zusammen und zeigt Verbesserungen auf. Der Anhang enthält Quellcode, Konfigurationsdateien, ergänzende Protokolle und Screenshots.
