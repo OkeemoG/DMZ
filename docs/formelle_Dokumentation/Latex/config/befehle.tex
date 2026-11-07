@@ -1,0 +1,34 @@
+\newcommand{\platzhalter}[1]{\textcolor{red}{[#1]}}
+
+\newcommand{\gqq}[1]{\glqq #1\grqq}
+\newcommand{\gq}[1]{\glq #1\grq}
+
+\newcommand{\textOrdner}[1]{\texttt{#1}}
+\newcommand{\textVariable}[1]{\texttt{#1}}
+\newcommand{\textKlasse}[1]{\texttt{#1}}
+\newcommand{\textFunktion}[1]{\texttt{#1}}
+
+\newtcbox{\code}{
+	on line,
+	fontupper=\ttfamily\small,
+	colback=black!7,
+	colframe=black!30,
+	boxrule=0.5pt,
+	arc=1pt,
+	boxsep=0pt,
+	left=2pt, right=2pt,
+	top=1pt, bottom=0.5pt
+}
+
+\newcounter{freq}
+\newcounter{rreq}
+\newcounter{nfreq}
+\newcounter{beq}
+\renewcommand{\thefreq}{F\arabic{freq}}
+\renewcommand{\therreq}{R\arabic{rreq}}
+\renewcommand{\thenfreq}{NF\arabic{nfreq}}
+\renewcommand{\thebeq}{B\arabic{beq}}
+\newcommand{\newF}[1]{\refstepcounter{freq}\thefreq\label{#1}}
+\newcommand{\newR}[1]{\refstepcounter{rreq}\therreq\label{#1}}
+\newcommand{\newNF}[1]{\refstepcounter{nfreq}\thenfreq\label{#1}}
+\newcommand{\newB}[1]{\refstepcounter{beq}\thebeq\label{#1}}

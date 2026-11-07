@@ -1,0 +1,26 @@
+\definecolor{vscdbg}{RGB}{30,30,30}
+\definecolor{vsctext}{RGB}{220,220,220}
+\definecolor{vsckeyword}{RGB}{86,156,214}
+\definecolor{vsccomment}{RGB}{87,166,74}
+\definecolor{vscstring}{RGB}{214,157,133}
+\definecolor{vscnumber}{RGB}{181,206,168}
+\definecolor{vscclass}{RGB}{78,201,176}
+
+\lstdefinestyle{vscode-dark}{
+	language=C++,
+	basicstyle=\listingsfont\fontsize{9}{11}\color{vsctext}\linespread{1.0}\selectfont,
+	numbers=left,
+	numberstyle=\tiny,
+	numbersep=8pt,
+	frame=single,
+	rulecolor=\color{black},
+	xleftmargin=25pt,
+	breaklines=true,
+	tabsize=2,
+	showstringspaces=false,
+	keywordstyle=\color{vsckeyword}\bfseries,
+	commentstyle=\color{vsccomment}\itshape,
+	stringstyle=\color{vscstring},
+	captionpos=b
+}
+\lstset{style=vscode-dark}

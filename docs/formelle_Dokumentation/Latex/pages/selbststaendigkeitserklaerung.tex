@@ -1,0 +1,49 @@
+\clearpage
+\phantomsection
+\addcontentsline{toc}{chapter}{Selbstständigkeitserklärung}
+
+\newif\ifErklaerungAlsPdf
+\ifx\vErklaerungPfad\empty\else
+	\IfFileExists{\vErklaerungPfad}{\ErklaerungAlsPdftrue}{}
+\fi
+
+\ifErklaerungAlsPdf
+	\includepdf[pages=-]{\vErklaerungPfad}
+\else
+	\section*{\fontsize{16pt}{19pt}\selectfont Selbstständigkeitserklärung}
+
+	\vspace{1\baselineskip}
+
+	gemäß Ziffer 1.1.13 der Anlage 1 zu §§ 3, 4 und 5 der Studien- und Prüfungsordnung für die Bachelorstudiengänge im Studienbereich Technik der Dualen Hochschule Baden-Württemberg vom 29.09.2017.
+
+	\vspace{1\baselineskip}
+
+	\noindent Wir versichern hiermit, dass wir unsere Studienarbeit mit dem Thema:
+
+	\vspace{0.5\baselineskip}
+
+	\begin{center}
+		\Large\textbf{\vTitel}
+	\end{center}
+
+	\vspace{1\baselineskip}
+
+	\noindent selbstständig verfasst und keine anderen als die angegebenen Quellen und Hilfsmittel benutzt haben. Wir haben bei der Erstellung der Arbeit KI-Werkzeuge eingesetzt. Dies haben wir an den entsprechenden Stellen der Arbeit kenntlich gemacht.
+
+	\vspace{2\baselineskip}
+
+	\noindent\vBearbeitungsort, den \vAbgabedatum
+
+	\vspace{1\baselineskip}
+
+	\noindent\parbox[b]{6cm}{
+		\ifx\vUnterschriftPfad\empty
+			\vspace*{2\baselineskip}
+		\else
+			\includegraphics[height=1.5cm]{\vUnterschriftPfad}\\
+		\fi
+		\hrule\strut\footnotesize Unterschrift
+	}
+\fi
+
+\clearpage

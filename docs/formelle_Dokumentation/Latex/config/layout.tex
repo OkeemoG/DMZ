@@ -1,0 +1,74 @@
+\setmainfont{Cambria}
+\setsansfont{Segoe UI}
+\setmonofont{JetBrains Mono}
+\newfontfamily\listingsfont{JetBrains Mono}
+
+\setstretch{1.5}
+\renewcommand{\arraystretch}{1.3}
+\setlist{noitemsep}
+\emergencystretch=1em
+
+\graphicspath{{./images/}}
+\urlstyle{same}
+
+\addto\captionsngerman{
+	\renewcommand{\figurename}{Abb.}
+	\renewcommand{\tablename}{Tab.}
+}
+
+\captionsetup{
+	font=footnotesize,
+	labelfont=bf,
+	labelsep=colon,
+	format=hang,
+	justification=justified,
+	singlelinecheck=false,
+	skip=6pt,
+	margin=1cm
+}
+\captionsetup[lstlisting]{justification=centering}
+
+\setcounter{biburlnumpenalty}{7000}
+\setcounter{biburlucpenalty}{7000}
+\setcounter{biburllcpenalty}{7000}
+
+\hypersetup{
+	bookmarksopen=false,
+	bookmarksnumbered=true,
+	pdftitle=\vTitel,
+	pdfsubject=\vTitel,
+	pdfauthor=\vAutor,
+	pdfborder={0 0 0}
+}
+
+\acsetup{
+	make-links    = true,
+	list/display  = used,
+	list/heading  = chapter*,
+	list/name     = Abkürzungsverzeichnis,
+	list/template = longtable,
+	first-style   = long-short
+}
+
+\setlength{\headheight}{15pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\renewcommand{\sectionmark}[1]{\markright{#1}}
+\renewcommand{\subsectionmark}[1]{}
+
+\fancypagestyle{vorspann}{
+	\fancyhf{}
+	\fancyfoot[C]{\thepage}
+}
+
+\fancypagestyle{hauptteil}{
+	\fancyhf{}
+	\fancyhead[L]{\thesection}
+	\fancyhead[R]{\nouppercase{\rightmark}}
+	\fancyfoot[C]{\thepage}
+}
+
+\fancypagestyle{quellen}{
+	\fancyhf{}
+	\fancyhead[R]{\nouppercase{Quellenverzeichnis}}
+	\fancyfoot[C]{\thepage}
+}
