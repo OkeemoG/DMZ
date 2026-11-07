@@ -1,15 +1,85 @@
 \chapter{Zielsetzung}\label{chap:zielsetzung}
 
-\platzhalter{Text}
-
 \section{Aufgabenstellung und Anforderungen}\label{sec:aufgabenstellung-und-anforderungen}
 
-\platzhalter{Text}
+Ziel des Programmentwurfs ist der Aufbau einer demilitarisierten Zone (\acs{dmz}), die den sicheren Betrieb eines firmeninternen, unternehmenskritischen Webservers nach dem Stand der Technik ermöglicht, sowie die Überprüfung ihrer Sicherheit durch selbst erstellte Angriffe. Neben proaktiven Maßnahmen umfasst die \ac{dmz} auch detektierende und reaktive Maßnahmen.
+
+Der Aufbau der \ac{dmz} erfolgt innerhalb einer virtuellen Maschine (\acs{vm}) mit Debian, 4\,GB Arbeitsspeicher (\acs{ram}), 10\,GB Festplattenspeicher und zwei virtuellen Kernen. Alle Komponenten werden als Docker-Container implementiert und in einer Containerlab-Umgebung miteinander verbunden.
+
+Die \ac{dmz} besteht aus einer Firewall, einem Reverse-Proxy, einem \ac{ids}, einer \ac{waf} und dem Webserver. Daneben werden ein separates Client-Netz, ein Backend-Netz mit einem System für Security Information and Event Management (\acs{siem}) sowie ein Remote-Office-Standort aufgebaut, der über ein \ac{vpn} an das Firmennetz angebunden ist.
+
+\autoref{tab:anforderungen} fasst die Anforderungen an die \acs{dmz} zusammen. Die funktionalen Anforderungen (F) ergeben sich unmittelbar aus der Aufgabenstellung, die nichtfunktionalen Anforderungen (NF) aus den vorgegebenen Rahmenbedingungen und den Bewertungskriterien der Abnahme.
+
+\begin{table}[htbp]
+	\centering
+	\caption{Anforderungen an die DMZ}
+	\label{tab:anforderungen}
+	\begin{tabularx}{\textwidth}{@{}lX@{}}
+		\toprule
+		\textbf{ID} & \textbf{Anforderung} \\
+		\midrule
+		\newF{req:firewall} & Die \acs{dmz} wird durch eine oder mehrere Firewalls abgesichert \\
+		\newF{req:reverse_proxy} & Ein Reverse-Proxy nimmt stellvertretend Anfragen aus dem Internet entgegen \\
+		\newF{req:ids} & Ein \acs{ids} überwacht den Netzwerkverkehr innerhalb der \acs{dmz}, warnt bei potenziellen Angriffen und protokolliert diese \\
+		\newF{req:waf} & Eine \acs{waf} sichert die interne Webanwendung ab \\
+		\newF{req:webserver} & Ein Webserver stellt die unternehmenskritische Webanwendung in der \acs{dmz} bereit \\
+		\newF{req:client_netz} & Ein separates Client-Netz ist über einen internen Router angebunden \\
+		\newF{req:backend_netz} & Ein separates Backend-Netz ist über eine Firewall angebunden \\
+		\newF{req:internet} & Ein Internet-Netzwerk ist über eine Edge-Firewall aus dem Client-Netz und aus der \acs{dmz} erreichbar \\
+		\newF{req:remote} & Ein Remote-Office-Standort besteht ausschließlich aus Clients \\
+		\newF{req:vpn} & Eine \acs{vpn}-Verbindung verbindet den Remote-Office-Standort mit dem Firmennetz \\
+		\newF{req:siem} & Ein \acs{siem}-System im Backend-Netz sammelt die Meldungen aller Sicherheitssysteme \\
+		\newF{req:haertung} & Die Sicherheitssysteme sind gegen Angriffe gehärtet und die Wirksamkeit der Härtung wird überprüft \\
+		\newF{req:angriffe} & Mindestens drei selbst erstellte Angriffe aus dem Internet und aus dem Client-Netz überprüfen die Sicherheit der \acs{dmz} und des Webservers \\
+		\newF{req:erkennung} & Angriffe werden erkannt und an das \acs{siem}-System gemeldet \\
+		\newF{req:dashboard} & Erkannte Angriffe werden in Dashboards für ein Security Operations Center übersichtlich visualisiert \\
+		\newF{req:reaktion} & Neben proaktiven und detektierenden Maßnahmen sind reaktive Maßnahmen umgesetzt \\
+		\newF{req:test} & Tests weisen die Funktionsfähigkeit der Systeme und deren Interaktion nach \\
+		\midrule
+		\newNF{req:latenz} & Erkannte Angriffe werden innerhalb von einer Sekunde für einen Operator verständlich angezeigt \\
+		\newNF{req:stand_technik} & Die Sicherheitsmaßnahmen entsprechen dem Stand der Technik \\
+		\newNF{req:container} & Alle Systeme laufen als Docker-Container und werden mit Containerlab aufgebaut \\
+		\newNF{req:ressourcen} & Die Gesamtumgebung läuft in einer \acs{vm} mit zwei virtuellen Kernen, 4\,GB Arbeitsspeicher und 10\,GB Festplattenspeicher \\
+		\newNF{req:installation} & Die Installation erfolgt automatisiert über Skripte \\
+		\newNF{req:stabilitaet} & Das System läuft während der Live-Demo stabil und ohne wesentliche Fehler \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
 
 \section{Abgrenzung und Annahmen}\label{sec:abgrenzung-und-annahmen}
 
-\platzhalter{Text}
+Der Programmentwurf ist eine Laborumgebung und keine Produktivumgebung. Im Mittelpunkt stehen die Architektur der \acs{dmz} und die Wirksamkeit ihrer Schutzmechanismen. Daraus ergeben sich die folgenden Abgrenzungen:
+
+\begin{itemize}
+	\item Das Internet wird durch einen einzelnen Router nachgebildet. Angreifer und Remote-Office-Clients verwenden private Adressen, die im realen Internet nicht erreichbar sind. Alle Angriffe laufen ausschließlich innerhalb der isolierten Laborumgebung gegen die eigenen Systeme.
+	\item Die Webanwendung ist bewusst einfach gehalten und lässt sich zwischen einer verwundbaren und einer sicheren Variante umschalten. Sie dient als Ziel der Angriffe, nicht als eigenständiger Gegenstand der Entwicklung.
+	\item Hochverfügbarkeit und Redundanz der Systeme werden nicht betrachtet.
+	\item Ein Namensdienst, ein zentrales Identitäts- und Rechtemanagement sowie eine externe Zertifizierungsstelle sind nicht Teil der Umgebung. Die Zertifikate für das \acs{vpn} stammen aus einer eigenen, lokal erzeugten Zertifikatsinfrastruktur.
+	\item Das \acs{siem}-System ist auf die Ressourcen der \acs{vm} zugeschnitten. Es sammelt, speichert und visualisiert die Meldungen und löst automatische Reaktionen aus. Umfangreiche Korrelationsregeln und eine Fallbearbeitung, wie sie ein kommerzielles \acs{siem}-System bietet, sind nicht Gegenstand des Programmentwurfs.
+\end{itemize}
+
+Für den Entwurf gelten außerdem folgende Annahmen:
+
+\begin{itemize}
+	\item Die \acs{vm}, Docker und Containerlab gelten als vertrauenswürdig.
+	\item Die Knoten besitzen kein separates Management-Netz. Jeglicher Verkehr läuft über die nachgebildeten Leitungen und damit durch die Firewalls. Einzig das \acs{siem}-System ist für die Bedienung durch einen Operator von außen erreichbar.
+	\item Angreifermodell: Betrachtet werden ein externer Angreifer im Internet, ein kompromittierter Client im internen Client-Netz sowie ein Angreifer, der Code in der Webanwendung in der \acs{dmz} ausführen kann. Die Angreifer verfügen über keine gültigen Zugangsdaten für das \acs{vpn}.
+	\item Authentisierte Clients am Remote-Office-Standort gelten als vertrauenswürdig.
+\end{itemize}
 
 \section{Erfolgskriterien}\label{sec:erfolgskriterien}
 
-\platzhalter{Text}
+Der Programmentwurf gilt als erfolgreich, wenn die folgenden überprüfbaren Kriterien erfüllt sind:
+
+\begin{itemize}
+	\item Alle Netze und Systeme aus \ref{req:firewall} bis \ref{req:siem} laufen gleichzeitig in der \acs{vm}. Die laut Kommunikationsmatrix erlaubten Verbindungen funktionieren, alle übrigen Verbindungen werden von den Firewalls verworfen.
+	\item Die \acs{vpn}-Verbindung vom Remote-Office-Standort zum Firmennetz wird aufgebaut, und die Remote-Office-Clients erreichen das Firmennetz ausschließlich über diesen Tunnel (\ref{req:vpn}).
+	\item Jede Härtungsmaßnahme ist durch einen eigenen Test belegt (\ref{req:haertung}).
+	\item Mindestens drei Angriffe werden durchgeführt, davon mindestens einer aus dem Internet und mindestens einer aus dem Client-Netz. Jeder Angriff wird von mindestens einer Verteidigungsschicht abgewehrt und von mindestens einem Sensor erkannt (\ref{req:angriffe}, \ref{req:erkennung}).
+	\item Jeder erkannte Angriff erscheint in weniger als einer Sekunde im Dashboard des \acs{siem}-Systems. Art, Quelle und Ziel des Angriffs sind für einen Operator ohne weitere Abfragen erkennbar (\ref{req:dashboard}, \ref{req:latenz}).
+	\item Nach einem erkannten Angriff greift eine automatische Reaktion, etwa die Sperre der angreifenden Adresse an der Edge-Firewall, und wird im Dashboard angezeigt (\ref{req:reaktion}).
+	\item Die Umgebung lässt sich auf einer frischen Debian-\acs{vm} allein mit den mitgelieferten Skripten installieren und starten, und die automatisierten Tests laufen danach fehlerfrei durch (\ref{req:installation}, \ref{req:test}).
+	\item Die Gesamtumgebung bleibt im Betrieb innerhalb der vorgegebenen Ressourcen der \acs{vm} (\ref{req:ressourcen}).
+\end{itemize}
+
+Die Überprüfung dieser Kriterien erfolgt in \autoref{chap:test-und-evaluation}. Der Abgleich mit den Anforderungen aus \autoref{tab:anforderungen} findet in \autoref{sec:einordnung-der-ergebnisse-und-abgleich-mit-den-zielen} statt.
